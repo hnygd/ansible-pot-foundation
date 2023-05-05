@@ -24,7 +24,7 @@ ifconfig_vtnet0_name="untrusted"
 ifconfig_untrusted="inet 192.168.1.1 netmask 255.255.255.0"
 ```
 
-Or it might already be configured that way if FreeBSD was installed with the [https://depenguin.me](depenguin.me installer).
+Or it might already be configured that way if FreeBSD was installed with the [depenguin.me installer](https://depenguin.me).
 
 ## Installation
 
@@ -126,7 +126,7 @@ Firewalling is handled by PF. A simple pf ruleset is applied.
 Pot is an open source jail framework/manager for FreeBSD. It's designed to support multiple jail usage, from VM emulation to small container model.
 ```
 
-Pot has a [https://pot.pizzamig.dev/](website) and [https://github.com/bsdpot/pot](github).
+Pot has a [website](https://pot.pizzamig.dev/) and [github](https://github.com/bsdpot/pot).
 
 ### Potluck
 
@@ -134,7 +134,7 @@ Pot has a [https://pot.pizzamig.dev/](website) and [https://github.com/bsdpot/po
 Potluck is the central repository for reusable Pot flavours & images 
 ```
 
-The [https://potluck.honeyguide.net/](potluck website) has a [https://github.com/bsdpot/potluck](github) too.
+The [potluck website](https://potluck.honeyguide.net/) has a [github](https://github.com/bsdpot/potluck) too.
 
 The images in use in this environment are from the Potluck repository.
 
