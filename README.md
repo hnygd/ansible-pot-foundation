@@ -18,7 +18,7 @@ You must have decided on the `quarterly` or `latest` package stream beforehand. 
 
 Your default network interface must be called `untrusted`. Make sure it's named correctly and you've rebooted before running the playbook.
 
-You can do this in `/etc/rc.conf` as follows
+You can do this in `/etc/rc.conf`. Make sure to get the interface name correct. 
 ```
 ifconfig_vtnet0_name="untrusted"
 ifconfig_untrusted="inet 192.168.1.1 netmask 255.255.255.0"
