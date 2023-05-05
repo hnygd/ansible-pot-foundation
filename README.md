@@ -193,7 +193,7 @@ The Beast of Argh pot image is intended for smaller setups seeking simplicity.
 
 ### Nomad jobs
 
-#### Stadard website
+#### Standard website
 
 The standard website is a nginx pot image and loads an HTML file with links to internal services, such as consol and nomad dashboards, or monitoring and alerting applications.
 
