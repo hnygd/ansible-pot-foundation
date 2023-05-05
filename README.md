@@ -197,7 +197,7 @@ The Beast of Argh pot image is intended for smaller setups seeking simplicity.
 
 The standard website is a nginx pot image and loads an HTML file with links to internal services, such as consol and nomad dashboards, or monitoring and alerting applications.
 
-#### Nomad job: Public website
+#### Public website
 
 The public website is a nginx pot image that serves files from persistent storage. You can add your own website files to this persistent storage.
 
