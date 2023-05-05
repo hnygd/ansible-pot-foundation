@@ -53,14 +53,13 @@
   any_errors_fatal: true
   import_playbook: playbooks/install-traefik-consul.yml
 
-# enable this when not testing
-# - name: Install acme.sh and get default certificate
-#   any_errors_fatal: true
-#   import_playbook: playbooks/install-acme-certificates.yml
+- name: Install acme.sh and get default certificate
+  any_errors_fatal: true
+  import_playbook: playbooks/install-acme-certificates.yml
 
-# - name: Install haproxy on primary server
-#   any_errors_fatal: true
-#   import_playbook: playbooks/install-haproxy.yml
+- name: Install haproxy on primary server
+  any_errors_fatal: true
+  import_playbook: playbooks/install-haproxy.yml
 
 - name: Install openldap server
   any_errors_fatal: true
