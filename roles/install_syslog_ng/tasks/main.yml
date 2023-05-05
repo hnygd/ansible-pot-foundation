@@ -1,0 +1,49 @@
+---
+
+- name: Install syslog-ng
+  become: yes
+  become_user: root
+  ansible.builtin.package:
+    name:
+      - syslog-ng
+    state: present
+
+- name: Setup syslog-ng.conf
+  ansible.builtin.template:
+    src: syslog-ng.conf.j2
+    dest: /usr/local/etc/syslog-ng.conf
+    owner: root
+    group: wheel
+    mode: 0644
+
+- name: Stop and disable syslog-ng
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      service syslogd onestop
+      service syslogd disable
+  ignore_errors: true
+
+- name: add syslog-ng rc.conf extras
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      sysrc syslog_ng_flags="-R /tmp/syslog-ng.persist"
+
+- name: Enable syslog-ng
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: syslog-ng
+    enabled: yes
+  retries: 3
+  delay: 2
+
+- name: Restart syslog-ng
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: syslog-ng
+    state: restarted

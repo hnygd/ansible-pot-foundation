@@ -1,0 +1,39 @@
+bind_addr = "0.0.0.0"
+datacenter = "{{ my_datacenter }}"
+advertise {
+  # This should be the IP of THIS MACHINE and must be routable by every node
+  # in your cluster
+  http = "{{ compute_ip }}.{{ server_octet }}"
+  rpc = "{{ compute_ip }}.{{ server_octet }}"
+  serf = "{{ compute_ip }}.{{ server_octet }}"
+}
+client {
+  enabled = true
+  options {
+    "driver.raw_exec.enable" = "1"
+  }
+  servers = [ {{ nomad_join_servers }} ]
+}
+plugin_dir = "/usr/local/libexec/nomad/plugins"
+consul {
+  address = "127.0.0.1:8500"
+  client_service_name = "{{ shortname }}_nomad_client"
+  auto_advertise = true
+  client_auto_join = true
+}
+tls {
+  http = false
+  rpc = false
+  verify_server_hostname = false
+  verify_https_client = false
+}
+telemetry {
+  collection_interval = "15s"
+  publish_allocation_metrics = true
+  publish_node_metrics = true
+  prometheus_metrics = true
+  disable_hostname = true
+}
+enable_syslog=true
+log_level="WARN"
+syslog_facility="LOCAL1"

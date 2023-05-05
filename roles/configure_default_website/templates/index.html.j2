@@ -1,0 +1,38 @@
+<!DOCTYPE html>
+<html>
+<head>
+<title>Administration Links</title>
+<style>
+    body {
+      width: 35em;
+      margin: 0 auto;
+      font-family: Tahoma, Verdana, Arial, sans-serif;
+    }
+</style>
+</head>
+<body>
+<h1>{{ my_datacenter }} Admin Links</h1>
+<section>
+  <div>
+    <h2>Monitoring</h2>
+    <li><a href="http://{{ admin_pot_beast_ip }}:9093">Alertmanager</a></li>
+    <li><a href="http://{{ admin_pot_beast_ip }}:3000">Grafana</a></li>
+    <li><a href="http://{{ admin_pot_beast_ip }}:9090">Prometheus</a></li>
+  </div>
+</section>
+<section>
+  <div>
+    <h2>Consul, Nomad and Traefik</h2>
+    <li><a href="http://{{ admin_pot_consul_ip }}:8500/ui/">Consul UI</a></li>
+    <li><a href="http://{{ admin_pot_nomad_ip }}:4646/ui/">Nomad UI</a></li>
+    <li><a href="http://{{ admin_pot_traefik_ip }}:9002/dashboard/">Traefik Dashboard</a></li>
+  </div>
+</section>
+<section>
+  <div>
+    <h2>Nice to have / To-Do</h2>
+    <li>phpmyadmin</li>
+  </div>
+</section>
+</body>
+</html>

@@ -1,0 +1,192 @@
+---
+
+- name: Set facts for consul IP address per server
+  set_fact:
+    pot_consul_ip: "{{ [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['consul_octet']] | list | join(' ') }}"
+  loop: "{{ groups['consulservers'] }}"
+  when: "item == inventory_hostname"
+
+# this is the consul (consul_servers_list) list
+- name: Initialize empty list for consul_consul_servers_list
+  set_fact:
+    consul_consul_servers_list: []
+
+- name: Add IP addresses of consul servers to consul_consul_servers_list
+  set_fact:
+    consul_consul_servers_list: "{{ consul_consul_servers_list + [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['consul_octet']] }}"
+  loop: "{{ groups['consulservers'] }}"
+
+- name: Print consul_consul_servers_list
+  debug:
+    var: consul_consul_servers_list
+
+- name: Get a string version of consul_consul_servers_list
+  set_fact:
+    consul_consul_servers_list_string: "{{ consul_consul_servers_list | join(',') }}"
+  run_once: true
+
+- name: Print consul_consul_servers_list_string
+  debug:
+    var: consul_consul_servers_list_string
+
+# Check for gossip key
+- name: Checking for existing gossip.key
+  become: yes
+  become_user: root
+  shell: "ls /usr/local/etc/consul.d/gossip.key"
+  register: filecheck_gossip_key
+  ignore_errors: true
+  changed_when: false
+  check_mode: no
+  run_once: true
+  delegate_to: "{{ groups['consulservers'][0] }}"
+
+- name: Read in gossip.key
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cat /usr/local/etc/consul.d/gossip.key
+  register: checking_existing_gossip_key
+  when: "filecheck_gossip_key.rc == 0"
+  run_once: true
+  delegate_to: "{{ groups['consulservers'][0] }}"
+
+- name: Set facts for gossip.key if not defined
+  set_fact:
+    consul_gossip_key: "{{ hostvars[groups['consulservers'][0]].checking_existing_gossip_key.stdout }}"
+  when: "consul_gossip_key is undefined"
+
+- name: Check if zroot/{{ my_data_dataset }}/jaildata/consul exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/{{ my_data_dataset }}/jaildata/consul"
+  register: check_consuldata_exists
+  failed_when: no
+  changed_when: "check_consuldata_exists.rc != 0"
+
+- name: Create zroot/{{ my_data_dataset }}/jaildata/consul
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      zfs create -o mountpoint=/mnt/{{ my_data_dataset }}/jaildata/consul zroot/{{ my_data_dataset }}/jaildata/consul
+  when: check_consuldata_exists.rc == 1
+
+- name: Set facts for consul mount in
+  set_fact:
+    pot_consul_mount_in: "/mnt/{{ my_data_dataset }}/jaildata/consul"
+
+- name: Check if we have {{ pot_consul_pot_name }} installed
+  become: yes
+  become_user: root
+  ansible.builtin.command: "/usr/local/bin/pot show -p {{ pot_consul_pot_name }}"
+  register: pot_consul_server_installed
+  failed_when: no
+  changed_when: "pot_consul_server_installed.rc != 0"
+
+- name: Print out debug messages for {{ pot_consul_pot_name }}
+  ansible.builtin.debug:
+    msg: consul base image pot show output is {{ pot_consul_server_installed.rc }}
+
+- name: download the consul pot image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot import -p "{{ pot_consul_base }}" -t "{{ pot_consul_version }}" -U "{{ pot_consul_url }}"
+  when: "pot_consul_server_installed.rc == 1"
+
+- name: Check if {{ pot_consul_clone_name }} exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "/usr/local/bin/pot show -p {{ pot_consul_clone_name }}"
+  register: pot_consul_clone_installed
+  failed_when: no
+  changed_when: "pot_consul_clone_installed.rc != 0"
+
+- name: Print out debug messages for consul clone
+  ansible.builtin.debug:
+    msg: consol-clone check output is {{ pot_consul_clone_installed.rc }}
+
+- name: Clone the consul pot image to {{ pot_consul_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot clone \
+        -P "{{ pot_consul_pot_name }}" \
+        -p "{{ pot_consul_clone_name }}" \
+        -N alias -i "{{ my_jail_vlan }}|{{ pot_consul_ip }}"
+  when: "pot_consul_clone_installed.rc == 1"
+
+- name: Mount in the consul persistent storage
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot mount-in -p {{ pot_consul_clone_name }} \
+        -d {{ pot_consul_mount_in }} \
+        -m {{ pot_consul_mount_dest }}
+  when: "pot_consul_clone_installed.rc == 1"
+
+- name: Set the pot parameters for {{ pot_consul_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot set-env -p "{{ pot_consul_clone_name }}" \
+        -E DATACENTER="{{ my_datacenter }}" \
+        -E NODENAME="{{ shortname }}_{{ pot_consul_nodename }}_server" \
+        -E IP="{{ pot_consul_ip }}" \
+        -E BOOTSTRAP="{{ pot_consul_bootstrap }}" \
+        -E GOSSIPKEY="{{ consul_gossip_key }}" \
+        -E REMOTELOG="{{ hostvars[groups['monitoring'][0]].jailnet_ip }}.{{ hostvars[groups['monitoring'][0]].beast_octet }}" \
+        -E CONSULSERVERS={{ consul_consul_servers_list_string }}
+  when: "pot_consul_clone_installed.rc == 1"
+
+- name: Set the pot attributes for {{ pot_consul_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot set-attr -p "{{ pot_consul_clone_name }}" -A start-at-boot -V True
+  when: "pot_consul_clone_installed.rc == 1"
+
+- name: Start the {{ pot_consul_clone_name }} image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot start "{{ pot_consul_clone_name }}"
+  when: "pot_consul_clone_installed.rc == 1"
+
+- name: Wait for 10 seconds for images to start
+  wait_for:
+    timeout: 10
+  when: "pot_consul_clone_installed.rc == 1"
+
+- name: Check if running pot is seasoned
+  stat:
+    path: /opt/pot/jails/{{ pot_consul_clone_name }}/m/usr/local/etc/pot-is-seasoned
+  register: result
+  failed_when: result.stat.exists == false
+  changed_when: none
+  
+- name: Restart consul client
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: consul
+    state: restarted
+  retries: 3
+  delay: 2
+
+- name: Restart node_exporter
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: node_exporter
+    state: restarted
+  retries: 3
+  delay: 2

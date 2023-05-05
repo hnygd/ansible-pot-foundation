@@ -1,0 +1,225 @@
+---
+
+# update this for the two roadwarrior connections
+
+- name: Set wireguard facts
+  set_fact:
+    wireguard_private_key: /usr/local/etc/wireguard/server_private.key
+    wireguard_public_key: /usr/local/etc/wireguard/server_public.key
+
+- name: Store wireguard private key
+  ansible.builtin.command: "cat {{ wireguard_private_key }}"
+  register: store_wg_private_key
+  no_log: true
+
+# create admin_one setup, for admin access to wireguard as client
+- name: Check for admin_one_private.key
+  ansible.builtin.command: "ls /usr/local/etc/wireguard/admin_one_private.key"
+  register: wg_admin_one_private_key
+  #ignore_errors: true
+  #changed_when: false
+  #check_mode: no
+  failed_when: no
+  changed_when: "wg_admin_one_private_key.rc != 0"
+
+- name: Generate admin_one wireguard keys
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cd /usr/local/etc/wireguard/
+      umask 077
+      wg genkey | tee /usr/local/etc/wireguard/admin_one_private.key | wg pubkey | tee /usr/local/etc/wireguard/admin_one_public.key
+  register: wg_admin_one_keys
+  #changed_when: false
+  #check_mode: no
+  when: "wg_admin_one_private_key.rc == 1"
+
+- name: Check for admin_one public.key
+  ansible.builtin.command: "ls /usr/local/etc/wireguard/admin_one_public.key"
+  register: wg_admin_one_public_key
+  #ignore_errors: true
+  #changed_when: false
+  #check_mode: no
+  failed_when: no
+  changed_when: "wg_admin_one_public_key.rc != 0"
+
+- name: Generate admin_one public key
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cd /usr/local/etc/wireguard/
+      umask 077
+      cat /usr/local/etc/wireguard/admin_one_private.key | wg pubkey > /usr/local/etc/wireguard/admin_one_public.key
+  register: admin_one_keys
+  #changed_when: false
+  #check_mode: no
+  when: "wg_admin_one_public_key.rc == 1"
+
+- name: Check for admin_one preshared key
+  ansible.builtin.command: "ls /usr/local/etc/wireguard/admin_one_preshared.key"
+  register: wg_admin_one_preshared_key
+  #ignore_errors: true
+  #changed_when: false
+  #check_mode: no
+  failed_when: no
+  changed_when: "wg_admin_one_preshared_key.rc != 0"
+
+- name: Generate admin_one preshared key
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cd /usr/local/etc/wireguard/
+      umask 077
+      wg genpsk > admin_one_preshared.key
+  register: wg_admin_one_preshared
+  #changed_when: false
+  #check_mode: no
+  when: "wg_admin_one_preshared_key.rc == 1"
+
+# Create admin_two setup such as for mobile phone 
+- name: Check for admin_two_private.key
+  ansible.builtin.command: "ls /usr/local/etc/wireguard/admin_two_private.key"
+  register: wg_admin_two_private_key
+  #ignore_errors: true
+  #changed_when: false
+  #check_mode: no
+  failed_when: no
+  changed_when: "wg_admin_two_private_key.rc != 0"
+
+- name: Generate admin_two wireguard keys
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cd /usr/local/etc/wireguard/
+      umask 077
+      wg genkey | tee /usr/local/etc/wireguard/admin_two_private.key | wg pubkey | tee /usr/local/etc/wireguard/admin_two_public.key
+  register: wg_admin_two_keys
+  #changed_when: false
+  #check_mode: no
+  when: "wg_admin_two_private_key.rc == 1"
+
+- name: Check for admin_two public.key
+  ansible.builtin.command: "ls /usr/local/etc/wireguard/admin_two_public.key"
+  register: wg_admin_two_public_key
+  #ignore_errors: true
+  #changed_when: false
+  #check_mode: no
+  failed_when: no
+  changed_when: "wg_admin_two_public_key.rc != 0"
+
+- name: Generate admin_two public key
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cd /usr/local/etc/wireguard/
+      umask 077
+      cat /usr/local/etc/wireguard/admin_two_private.key | wg pubkey > /usr/local/etc/wireguard/admin_two_public.key
+  register: admin_two_keys
+  #changed_when: false
+  #check_mode: no
+  when: "wg_admin_two_public_key.rc == 1"
+
+- name: Check for admin_two preshared key
+  ansible.builtin.command: "ls /usr/local/etc/wireguard/admin_two_preshared.key"
+  register: wg_admin_two_preshared_key
+  #ignore_errors: true
+  #changed_when: false
+  #check_mode: no
+  failed_when: no
+  changed_when: "wg_admin_two_preshared_key.rc != 0"
+
+- name: Generate admin_two preshared key
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cd /usr/local/etc/wireguard/
+      umask 077
+      wg genpsk > admin_two_preshared.key
+  register: wg_admin_two_preshared
+  #changed_when: false
+  #check_mode: no
+  when: "wg_admin_two_preshared_key.rc == 1"
+
+- name: Set wireguard client facts
+  set_fact:
+    wireguard_admin_one_private_key: /usr/local/etc/wireguard/admin_one_private.key
+    wireguard_admin_one_public_key: /usr/local/etc/wireguard/admin_one_public.key
+    wireguard_admin_one_preshared_key: /usr/local/etc/wireguard/admin_one_preshared.key
+    wireguard_admin_two_private_key: /usr/local/etc/wireguard/admin_two_private.key
+    wireguard_admin_two_public_key: /usr/local/etc/wireguard/admin_two_public.key
+    wireguard_admin_two_preshared_key: /usr/local/etc/wireguard/admin_two_preshared.key
+
+- name: Store admin_one public key
+  ansible.builtin.command: "cat {{ wireguard_admin_one_public_key }}"
+  register: store_wg_admin_one_public_key
+  no_log: true
+
+- name: Store admin_one preshared key
+  ansible.builtin.command: "cat {{ wireguard_admin_one_preshared_key }}"
+  register: store_wg_admin_one_preshared_key
+  no_log: true
+
+- name: Store admin_two public key
+  ansible.builtin.command: "cat {{ wireguard_admin_two_public_key }}"
+  register: store_wg_admin_two_public_key
+  no_log: true
+
+- name: Store admin_two preshared key
+  ansible.builtin.command: "cat {{ wireguard_admin_two_preshared_key }}"
+  register: store_wg_admin_two_preshared_key
+  no_log: true
+
+- name: Update wg0.conf with roadwarrior clients
+  become: yes
+  become_user: root
+  blockinfile: 
+    state: present
+    insertafter: EOF
+    dest: /usr/local/etc/wireguard/wg0.conf
+    content: |
+     # name: admin_one
+     [Peer]
+     PublicKey = {{ store_wg_admin_one_public_key.stdout }}
+     PreSharedKey = {{ store_wg_admin_one_preshared_key.stdout }}
+     AllowedIPs = {{ wireguard_ip }}.{{ wg_rw_one_octet }}/32
+     PersistentKeepalive = 25
+     
+     # name: admin_two
+     [Peer]
+     PublicKey = {{ store_wg_admin_two_public_key.stdout }}
+     PreSharedKey = {{ store_wg_admin_two_preshared_key.stdout }}
+     AllowedIPs = {{ wireguard_ip }}.{{ wg_rw_two_octet }}/32
+     PersistentKeepalive = 25
+
+- name: Enable wireguard
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: wireguard
+    enabled: yes
+  retries: 3
+  delay: 2
+
+- name: Set wireguard interfaces
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      sysrc wireguard_interfaces="wg0"
+  retries: 3
+  delay: 2
+
+- name: Start wireguard
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: wireguard
+    state: restarted
+  retries: 3
+  delay: 2

@@ -1,0 +1,287 @@
+---
+
+- name: Set beast pot image IP address
+  set_fact:
+    pot_beast_ip: "{{ [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['beast_octet']] | list | join(' ') }}"
+  loop: "{{ groups['monitoring'] }}"
+  when: "item == inventory_hostname"
+
+- name: Print beast IP
+  debug:
+    var: pot_beast_ip
+
+- name: Initialize empty list for beast_consul_servers_list
+  set_fact:
+    beast_consul_servers_list: []
+
+- name: Add IP addresses of consul servers to beast_consul_servers_list
+  set_fact:
+    beast_consul_servers_list: "{{ beast_consul_servers_list + [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['consul_octet']] }}"
+  loop: "{{ groups['consulservers'] }}"
+
+- name: Print beast_consul_servers_list
+  debug:
+    var: beast_consul_servers_list
+
+- name: Get a string version of beast_consul_servers_list
+  set_fact:
+    beast_consul_servers_list_string: "{{ beast_consul_servers_list | join(',') }}"
+  run_once: true
+
+- name: Print beast_consul_servers_list_string
+  debug:
+    var: beast_consul_servers_list_string
+
+- name: Set facts for consul servers to join
+  set_fact:
+    beast_consul_join_servers: "{{ beast_consul_servers_list_string }}"
+
+- name: Print beast_consul_join_servers
+  debug:
+    var: beast_consul_join_servers
+
+# scrape consul
+# we already have a list we use for consul join, re-use that to scrape
+- name: Set fact for consul scrape list
+  set_fact:
+    my_consul_scrape_list: "{{ beast_consul_join_servers }}"
+
+# scrape nomad
+- name: Initialize empty list for nomad_servers_list
+  set_fact:
+    nomad_servers_list: []
+  when: "my_nomad_scrape_list is undefined"
+
+- name: Add IP addresses of nomad servers to nomad_servers_list
+  set_fact:
+    nomad_servers_list: "{{ nomad_servers_list + [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['nomad_octet']] }}"
+  loop: "{{ groups['nomadservers'] }}"
+  when: "my_nomad_scrape_list is undefined"
+
+- name: Print nomad_servers_list
+  debug:
+    var: nomad_servers_list
+  when: "my_nomad_scrape_list is undefined"
+
+- name: Get a quoted string version of nomad_servers_list
+  set_fact:
+    nomad_servers_list_string: "{{ nomad_servers_list | join(',') }}"
+  run_once: true
+  when: "my_nomad_scrape_list is undefined"
+
+- name: Print nomad_servers_list_string
+  debug:
+    var: nomad_servers_list_string
+  when: "my_nomad_scrape_list is undefined"
+
+- name: Set facts for nomad servers scrape list
+  set_fact:
+    my_nomad_scrape_list: "{{ nomad_servers_list_string }}"
+  when: "my_nomad_scrape_list is undefined"
+
+# scrape traefik
+- name: Initialize empty list for traefik_servers_list
+  set_fact:
+    traefik_servers_list: []
+  when: "my_traefik_scrape_list is undefined"
+
+# need ip and port
+- name: Add IP addresses of traefik servers to traefik_servers_list
+  set_fact:
+    traefik_servers_list: "{{ traefik_servers_list + [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['traefik_octet'] ~ ':' ~ hostvars[item]['traefik_scrape_port']] }}"
+  loop: "{{ groups['traefikservers'] }}"
+  when: "my_traefik_scrape_list is undefined"
+
+- name: Print traefik_servers_list
+  debug:
+    var: traefik_servers_list
+  when: "my_traefik_scrape_list is undefined"
+
+- name: Get a quoted string version of traefik_servers_list
+  set_fact:
+    traefik_servers_list_string: "{{ traefik_servers_list | join(', ') }}"
+  run_once: true
+  when: "my_traefik_scrape_list is undefined"
+
+- name: Print traefik_servers_list_string
+  debug:
+    var: traefik_servers_list_string
+  when: "my_traefik_scrape_list is undefined"
+
+- name: Set facts for traefik servers scrape list
+  set_fact:
+    my_traefik_scrape_list: "{{ traefik_servers_list_string }}"
+  when: "my_traefik_scrape_list is undefined"
+
+# Check for gossip key
+- name: Checking for existing gossip.key
+  become: yes
+  become_user: root
+  shell: "ls /usr/local/etc/consul.d/gossip.key"
+  register: beast_filecheck_gossip_key
+  ignore_errors: true
+  changed_when: false
+  check_mode: no
+  run_once: true
+  delegate_to: "{{ groups['consulservers'][0] }}"
+
+- name: Read in gossip.key
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cat /usr/local/etc/consul.d/gossip.key
+  register: beast_checking_existing_gossip_key
+  when: "beast_filecheck_gossip_key.rc == 0"
+  run_once: true
+  delegate_to: "{{ groups['consulservers'][0] }}"
+
+- name: Set facts for gossip.key if not defined
+  set_fact:
+    beast_consul_gossip_key: "{{ hostvars[groups['consulservers'][0]].beast_checking_existing_gossip_key.stdout }}"
+
+# create datasets
+- name: Check if zroot/{{ my_data_dataset }}/jaildata/beast exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/{{ my_data_dataset }}/jaildata/beast"
+  register: check_beastdata_exists
+  failed_when: no
+  changed_when: "check_beastdata_exists.rc != 0"
+
+- name: Create zroot/{{ my_data_dataset }}/jaildata/beast
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      zfs create -o mountpoint=/mnt/{{ my_data_dataset }}/jaildata/beast zroot/{{ my_data_dataset }}/jaildata/beast
+  when: check_beastdata_exists.rc == 1
+
+- name: Set facts for beast mount in
+  set_fact:
+    pot_beast_mount_in: "/mnt/{{ my_data_dataset }}/jaildata/beast"
+
+- name: Check if we have {{ pot_beast_base }} installed
+  become: yes
+  become_user: root
+  ansible.builtin.command: "/usr/local/bin/pot show -p {{ pot_beast_pot_name }}"
+  register: pot_beast_installed
+  failed_when: no
+  changed_when: "pot_beast_installed.rc != 0"
+
+- name: Print out debug messages for {{ pot_beast_pot_name }}
+  ansible.builtin.debug:
+    msg: beast base image check output is {{ pot_beast_installed.rc }}
+
+- name: download the base beast pot image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot import -p "{{ pot_beast_base }}" -t "{{ pot_beast_version }}" -U "{{ pot_beast_url }}"
+  when: "pot_beast_installed.rc == 1"
+
+- name: Check if {{ pot_beast_clone_name }} exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "/usr/local/bin/pot show -p {{ pot_beast_clone_name }}"
+  register: pot_beast_clone_installed
+  failed_when: no
+  changed_when: "pot_beast_clone_installed.rc != 0"
+
+- name: Print out debug messages for beast clone
+  ansible.builtin.debug:
+    msg: beast-clone check output is {{ pot_beast_clone_installed.rc }}
+
+- name: Clone the beast pot image to {{ pot_beast_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot clone \
+        -P "{{ pot_beast_pot_name }}" \
+        -p "{{ pot_beast_clone_name }}" \
+        -N alias -i "{{ my_jail_vlan }}|{{ pot_beast_ip }}"
+  when: "pot_beast_clone_installed.rc == 1"
+
+- name: Mount in the beast persistent storage
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot mount-in -p {{ pot_beast_clone_name }} \
+        -d {{ pot_beast_mount_in }} \
+        -m {{ pot_beast_mount_dest }}
+  when: "pot_beast_clone_installed.rc == 1"
+
+- name: Set the pot parameters for {{ pot_beast_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot set-env -p "{{ pot_beast_clone_name }}" \
+        -E DATACENTER="{{ my_datacenter }}" \
+        -E NODENAME="{{ shortname }}_{{ pot_beast_nodename }}_server" \
+        -E IP="{{ pot_beast_ip }}" \
+        -E GOSSIPKEY="{{ beast_consul_gossip_key }}" \
+        -E GRAFANAUSER={{ pot_beast_grafana_user }} \
+        -E GRAFANAPASSWORD={{ pot_beast_grafana_pass }} \
+        -E SCRAPECONSUL={{ my_consul_scrape_list }} \
+        -E SCRAPENOMAD={{ my_nomad_scrape_list }} \
+        -E TRAEFIKSERVER={{ my_traefik_scrape_list }} \
+        -E SMTPHOSTPORT="{{ pot_beast_smtphostport }}" \
+        -E SMTPFROM="{{ pot_beast_smtp_from }}" \
+        -E ALERTADDRESS="{{ pot_beast_alertaddress }}" \
+        -E SMTPUSER="{{ pot_beast_smtp_user }}" \
+        -E SMTPPASS="{{ pot_beast_smtp_pass }}" \
+        -E REMOTELOG="{{ pot_beast_ip }}" \
+        -E CONSULSERVERS={{ beast_consul_join_servers }}
+  when: "pot_beast_clone_installed.rc == 1"
+
+- name: Set the pot attributes for {{ pot_beast_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot set-attr -p "{{ pot_beast_clone_name }}" -A start-at-boot -V True
+  when: "pot_beast_clone_installed.rc == 1"
+
+- name: Start the {{ pot_beast_clone_name }} image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot start "{{ pot_beast_clone_name }}"
+  when: "pot_beast_clone_installed.rc == 1"
+
+- name: Wait for 60 seconds for image to start
+  wait_for:
+    timeout: 60
+  when: "pot_beast_clone_installed.rc == 1"
+
+- name: Check if running pot is seasoned
+  stat:
+    path: /opt/pot/jails/{{ pot_beast_clone_name }}/m/usr/local/etc/pot-is-seasoned
+  register: result
+  failed_when: result.stat.exists == false
+  changed_when: none
+  retries: 3
+  delay: 2
+  
+- name: Restart syslog-ng
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: syslog-ng
+    state: restarted
+  retries: 3
+  delay: 2
+
+- name: Restart node_exporter
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: node_exporter
+    state: restarted
+  retries: 3
+  delay: 2

@@ -1,0 +1,53 @@
+---
+
+- name: Stop consul client
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: consul
+    state: stopped
+
+- name: Disable consul
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: consul
+    enabled: no
+
+- name: Remove consul artifacts (checkpoint-signature)
+  ansible.builtin.file:
+    path: /var/db/consul/checkpoint-signature
+    state: absent
+
+- name: Remove consul artifacts (node-id)
+  ansible.builtin.file:
+    path: /var/db/consul/node-id
+    state: absent
+
+- name: Remove consul artifacts (serf)
+  ansible.builtin.file:
+    path: /var/db/consul/serf
+    state: absent
+
+- name: Remove consul artifacts (checks)
+  ansible.builtin.file:
+    path: /var/db/consul/checks
+    state: absent
+
+- name: Remove consul artifacts (services)
+  ansible.builtin.file:
+    path: /var/db/consul/services
+    state: absent
+
+- name: Remove consul artifacts (agent.json)
+  ansible.builtin.file:
+    path: /usr/local/etc/consul.d/agent.json
+    state: absent
+
+- name: Remove consul artifacts (gossip.key)
+  ansible.builtin.file:
+    path: /usr/local/etc/consul.d/gossip.key
+    state: absent
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+

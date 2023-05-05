@@ -1,0 +1,76 @@
+---
+
+- name: Configure sysctl values
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      sysctl -w security.jail.allow_raw_sockets=1
+      sysctl -w net.inet.tcp.msl=3000
+      sysctl -w net.inet.tcp.tolerate_missing_ts=1
+
+- name: Update sysctl.conf for jail raw sockets
+  ansible.builtin.lineinfile:
+    path: /etc/sysctl.conf
+    line: security.jail.allow_raw_sockets=1
+    create: yes
+
+- name: Update sysctl.conf for net inet tcp msl
+  ansible.builtin.lineinfile:
+    path: /etc/sysctl.conf
+    line: net.inet.tcp.msl=3000
+    create: yes
+
+- name: Update sysctl.conf for net inet tcp tolerate missing ts
+  ansible.builtin.lineinfile:
+    path: /etc/sysctl.conf
+    line: net.inet.tcp.tolerate_missing_ts=1
+    create: yes
+
+# ToDo: add step to rename vtnet0 or igb0 or whatever to 'untrusted'
+#  sysrc ifconfig_igb0_name="untrusted"
+#  sysrc ifconfig_vtnet0_name="untrusted"
+# etc
+
+- name: Check if {{ my_jail_vlan }} interface exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "ifconfig {{ my_jail_vlan }}"
+  register: check_if_my_jail_vlan_exists
+  failed_when: no
+  changed_when: "check_if_my_jail_vlan_exists.rc != 0"
+
+# ToDo: make this individual ansible tasks?
+- name: Setup {{ my_jail_vlan }} and {{ my_compute_vlan }} interfaces
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      ifconfig {{ my_jail_vlan }} create vlan 1001 vlandev {{ my_network_interface }}
+      ifconfig {{ my_jail_vlan }} inet {{ jailnet_ip }}.{{ server_octet }}/24 up
+      ifconfig {{ my_compute_vlan }} create vlan 1006 vlandev {{ my_network_interface }}
+      ifconfig {{ my_compute_vlan }} inet {{ compute_ip }}.{{ server_octet }}/24 up
+      sysrc vlans_untrusted="{{ my_jail_vlan }} {{ my_compute_vlan }}"
+      sysrc create_args_{{ my_jail_vlan }}="vlan 1001"
+      sysrc ifconfig_{{ my_jail_vlan }}="inet {{ jailnet_ip }}.{{ server_octet }}/24"
+      sysrc create_args_{{ my_compute_vlan }}="vlan 1006"
+      sysrc ifconfig_{{ my_compute_vlan }}="inet {{ compute_ip }}.{{ server_octet }}/24"
+      sysrc route_{{ my_jail_vlan }}static="-net {{ jailnet_ip }}.0/24 {{ jailnet_ip }}.1"
+      sysrc route_{{ my_compute_vlan }}static="-net {{ compute_ip }}.0/24 {{ compute_ip }}.1"
+  when: check_if_my_jail_vlan_exists.rc == 1
+
+- name: Restart networking
+  become: yes
+  become_user: root
+  shell: service netif restart && service routing restart
+  async: 1
+  poll: 0
+  when: check_if_my_jail_vlan_exists.rc == 1
+
+- name: Wait for connection
+  wait_for_connection:
+    connect_timeout: 60
+    sleep: 5
+    delay: 5
+    timeout: 300
+  when: check_if_my_jail_vlan_exists.rc == 1

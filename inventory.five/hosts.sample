@@ -1,0 +1,179 @@
+# Update the following with your settings
+# - REPLACE-WITH-USERNAME
+# - REPLACE-WITH-IP-HOSTNAME
+# - REPLACE-WITH-EMAIL-ADDRESS
+# - REPLACE-WITH-DOMAIN-NAME
+# - REPLACE-FRONTEND-IP
+# - REPLACE-GRAFANA-USER
+# - REPLACE-GRAFANA-PASSWORD
+# - REPLACE-WITH-LDAP-PASSWORD
+# - REPLACE-DEFAULT-LDAP-USER
+# - REPLACE-DEFAULT-LDAP-USER-PASSWORD
+# - REPLACE-WITH-MYSQL-ROOT-PASSWORD
+# - REPLACE-WITH-PROM-SCRAPE-PASSWORD 
+#
+# Optional
+# - pf_ipv6_enable=yes/no
+# 
+
+[all:vars]
+my_default_username=REPLACE-WITH-USERNAME
+
+[local]
+localhost ansible_python_interpreter="env python3"
+
+[servers]
+server1 ansible_host=REPLACE-WITH-IP-HOSTNAME ansible_port=22 jailnet_ip=10.1.0 compute_ip=10.101.0 shortname=server1 server_octet=1
+server2 ansible_host=REPLACE-WITH-IP-HOSTNAME ansible_port=22 jailnet_ip=10.2.0 compute_ip=10.102.0 shortname=server2 server_octet=1
+server3 ansible_host=REPLACE-WITH-IP-HOSTNAME ansible_port=22 jailnet_ip=10.3.0 compute_ip=10.103.0 shortname=server3 server_octet=1
+server4 ansible_host=REPLACE-WITH-IP-HOSTNAME ansible_port=22 jailnet_ip=10.4.0 compute_ip=10.104.0 shortname=server4 server_octet=1
+server5 ansible_host=REPLACE-WITH-IP-HOSTNAME ansible_port=22 jailnet_ip=10.5.0 compute_ip=10.105.0 shortname=server5 server_octet=1
+
+[servers:vars]
+my_data_dataset=data
+my_network_interface=untrusted
+my_datacenter=dc1
+my_jails_interface=untrusted
+my_jail_vlan=jailnet
+my_compute_vlan=compute
+wireguard_keepalive=25
+external_dns_server=1.1.1.1
+pf_ipv6_enable=no
+# acme
+my_acme_local_certs=/root/.certs
+my_acme_provider=zerossl
+my_acme_email=REPLACE-WITH-EMAIL-ADDRESS
+my_acme_domain=REPLACE-WITH-DOMAIN-NAME
+my_acme_alias1=www.REPLACE-WITH-DOMAIN-NAME
+my_acme_alias2=server.REPLACE-WITH-DOMAIN-NAME
+# haproxy
+haproxy_public_ip=REPLACE-FRONTEND-IP
+haproxy_default_www=127.0.0.1
+# consul pot image
+pot_consul_base=consul-amd64-13_1
+pot_consul_version=2.4.2
+pot_consul_pot_name=consul-amd64-13_1_2_4_2
+pot_consul_clone_name=consul-clone
+pot_consul_url=https://potluck.honeyguide.net/consul
+pot_consul_nodename=consul
+pot_consul_bootstrap=5
+pot_consul_mount_dest=/mnt
+# beast pot image
+pot_beast_syslog_version=4.1
+pot_beast_base=beast-of-argh-amd64-13_1
+pot_beast_version=0.4.1
+pot_beast_pot_name=beast-of-argh-amd64-13_1_0_4_1
+pot_beast_url=https://potluck.honeyguide.net/beast-of-argh
+pot_beast_clone_name=beast-clone
+pot_beast_nodename=beast
+pot_beast_mount_dest=/mnt
+pot_beast_grafana_user=REPLACE-GRAFANA-USER
+pot_beast_grafana_pass=REPLACE-GRAFANA-PASSWORD
+pot_beast_smtphostport=localhost:25
+pot_beast_smtp_from=notices@REPLACE-WITH-DOMAIN-NAME
+pot_beast_alertaddress=REPLACE-WITH-EMAIL
+pot_beast_smtp_user=
+pot_beast_smtp_pass=
+# stdwebsite base
+pot_nomad_nginx_base=nginx-nomad-alt-amd64-13_1
+pot_nomad_nginx_version=0.2.1
+pot_nomad_nginx_pot_name=nginx-nomad-alt-amd64-13_1_0_2_1
+pot_nomad_nginx_url=https://potluck.honeyguide.net/nginx-nomad-alt
+# std website nginx alt image for nomad job with administration links
+pot_nomad_nginx_name=stdwebsite
+pot_nomad_nginx_mount_dest=/usr/local/www/stdwebsite
+pot_nomad_nginx_access_port=25080
+# public website nomad job with frontend configured in haproxy
+pot_nomad_nginx_public_name=publicwebsite
+pot_nomad_nginx_public_mount_dest=/usr/local/www/stdwebsite
+pot_nomad_nginx_public_access_port=26080
+# nomad pot image
+pot_nomad_base=nomad-server-amd64-13_1
+pot_nomad_version=3.5.1
+pot_nomad_pot_name=nomad-server-amd64-13_1_3_5_1
+pot_nomad_clone_name=nomad-server-clone
+pot_nomad_url=https://potluck.honeyguide.net/nomad-server
+pot_nomad_nodename=nomad
+pot_nomad_bootstrap=5
+pot_nomad_mount_dest=/mnt
+pot_nomad_raftmultiplier=3
+pot_nomad_jobsdirectory=/root/.nomadjobs
+pot_nomad_jobsdestination=/root/nomadjobs
+pot_nomad_job_stdwebsite=stdwebsite.nomad
+pot_nomad_job_publicwebsite=publicwebsite.nomad
+# traefik-consul
+pot_traefik_base=traefik-consul-amd64-13_1
+pot_traefik_version=1.7.1
+pot_traefik_pot_name=traefik-consul-amd64-13_1_1_7_1
+pot_traefik_clone_name=traefik-consul-clone
+pot_traefik_url=https://potluck.honeyguide.net/traefik-consul
+pot_traefik_nodename=traefikconsul
+pot_traefik_mount_dest=/mnt
+# openldap
+pot_ldap_base=openldap-amd64-13_1
+pot_ldap_version=1.8.1
+pot_ldap_pot_name=openldap-amd64-13_1_1_8_1
+pot_ldap_clone_name=openldap-clone
+pot_ldap_url=https://potluck.honeyguide.net/openldap
+pot_ldap_nodename=openldap1
+pot_ldap_mount_dest=/mnt
+pot_ldap_password=REPLACE-WITH-LDAP-PASSWORD
+pot_ldap_server_id=001
+pot_ldap_default_groups=Y
+pot_ldap_domain_name=REPLACE-WITH-DOMAIN-NAME
+pot_ldap_hostname=openldap.local
+pot_ldap_cron_dir=/mnt/openldap-data/backups
+pot_ldap_generic_user=REPLACE-DEFAULT-LDAP-USER
+pot_ldap_generic_pass=REPLACE-DEFAULT-LDAP-USER-PASSWORD
+# mariadb
+pot_mariadb_base=mariadb-amd64-13_1
+pot_mariadb_version=3.3.1
+pot_mariadb_pot_name=mariadb-amd64-13_1_3_3_1
+pot_mariadb_clone_name=mariadb-clone
+pot_mariadb_url=https://potluck.honeyguide.net/mariadb
+pot_mariadb_nodename=mariadb
+pot_mariadb_mount_dest=/var/db/mysql
+pot_mariadb_root_pass=REPLACE-WITH-MYSQL-ROOT-PASSWORD
+pot_mariadb_scrape_pass=REPLACE-WITH-PROM-SCRAPE-PASSWORD
+pot_mariadb_dump_schedule="5 21 * * *"
+pot_mariadb_dump_user=root
+pot_mariadb_dump_file=/var/db/mysql/full_mariadb_backup.sql
+
+[wgmesh]
+server1 wireguard_ip=10.254.1 wg_octet=1 wg_port=51820
+server2 wireguard_ip=10.254.2 wg_octet=1 wg_port=51821
+server3 wireguard_ip=10.254.3 wg_octet=1 wg_port=51822
+server4 wireguard_ip=10.254.4 wg_octet=1 wg_port=51823 
+server5 wireguard_ip=10.254.5 wg_octet=1 wg_port=51824 
+
+[wgclients]
+server1 wg_rw_one_octet=2 wg_rw_two_octet=3
+
+[frontend]
+server1
+
+[monitoring]
+server1 beast_octet=100
+
+[consulservers]
+server1 consul_octet=10
+server2 consul_octet=10
+server3 consul_octet=10
+server4 consul_octet=10
+server5 consul_octet=10
+
+[nomadservers]
+server1 nomad_octet=11 pot_nomad_importjobs=1
+server2 nomad_octet=11 pot_nomad_importjobs=0
+server3 nomad_octet=11 pot_nomad_importjobs=0
+server4 nomad_octet=11 pot_nomad_importjobs=0
+server5 nomad_octet=11 pot_nomad_importjobs=0
+
+[traefikservers]
+server1 traefik_octet=12 traefik_scrape_port=8082
+
+[ldap]
+server1 openldap_octet=14
+
+[database]
+server1 mariadb_octet=13

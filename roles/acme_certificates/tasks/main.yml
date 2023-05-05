@@ -1,0 +1,321 @@
+---
+
+- name: Install basic packages
+  become: yes
+  become_user: root
+  ansible.builtin.package:
+    name:
+      - acme.sh
+    state: present
+
+- name: Stop haproxy
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: haproxy
+    state: stopped
+
+- name: Make /root/.acme.sh directory
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      mkdir -p /root/.acme.sh/
+      touch /root/.acme.sh/account.conf
+
+- name: Make {{ my_acme_local_certs }} directory
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      mkdir -p {{ my_acme_local_certs }}
+
+- name: Configure acme.sh for the selected provider
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      /usr/local/sbin/acme.sh \
+       --register-account \
+       -m {{ my_acme_email }} \
+       --home {{ my_acme_local_certs }} \
+       --server {{ my_acme_provider }}
+
+- name: Set the configured provider as default
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      /usr/local/sbin/acme.sh \
+       --set-default-ca \
+       --server {{ my_acme_provider }}
+
+- name: Set log file for initial registration
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      touch {{ my_acme_local_certs }}/registration.log
+
+- name: Set fact for log file
+  set_fact:
+    acme_registration_log: "{{ my_acme_local_certs }}/registration.log"
+
+- name: Check for certificate {{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.cer
+  stat:
+    path: "{{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.cer"
+  register: check_acme_cert
+
+# # TODO: include the additional aliases only if they exist
+# - name: Issue the default certificate
+#   become: yes
+#   become_user: root
+#   shell:
+#     cmd: |
+#       /usr/local/sbin/acme.sh --issue \
+#         -d {{ my_acme_domain }} \
+#         -d {{ my_acme_alias1 }} \
+#         -d {{ my_acme_alias2 }} \
+#         --server {{ my_acme_provider }} \
+#         --home {{ my_acme_local_certs }} \
+#         --standalone \
+#         --listen-v4 \
+#         --httpport 80 \
+#         --log {{ acme_registration_log }}
+#   when: not check_acme_cert.stat.exists
+#   register: acme_certificate_registration
+#   async: 1000
+#   poll: 0
+
+# TODO: include the additional aliases only if they exist
+- name: Issue the default certificate
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      /usr/local/sbin/acme.sh --issue \
+        -d {{ my_acme_domain }} \
+        -d {{ my_acme_alias1 }} \
+        --server {{ my_acme_provider }} \
+        --home {{ my_acme_local_certs }} \
+        --standalone \
+        --listen-v4 \
+        --httpport 80 \
+        --log {{ acme_registration_log }}
+  when: not check_acme_cert.stat.exists
+  register: acme_certificate_registration
+  async: 1000
+  poll: 0
+
+# this fails with a shorter time than 90 seconds
+- name: Wait for 90 seconds for async certificate registration to write to log file
+  wait_for:
+    timeout: 90
+  when: not check_acme_cert.stat.exists
+
+- name: Read the content of acme log file
+  slurp:
+    src: "{{ acme_registration_log }}"
+  register: log_file_content
+  when: not check_acme_cert.stat.exists
+
+- name: Decode the content of acme log file
+  set_fact:
+    log_file_decoded: "{{ log_file_content['content'] | b64decode }}"
+  when: not check_acme_cert.stat.exists
+
+- name: Check for _on_issue_success or _on_issue_err in acme log file
+  set_fact:
+    async_task_completed: "{{ '_on_issue_success' in log_file_decoded }}"
+    async_task_error: "{{ '_on_issue_err' in log_file_decoded }}"
+  when: not check_acme_cert.stat.exists
+
+- name: Fail the playbook if _on_issue_err is found in acme log file
+  fail:
+    msg: "Error found in log file: _on_issue_err"
+  when: async_task_error is defined
+
+- name: Display async task successful completion status
+  debug:
+    var: async_task_completed
+  when: not check_acme_cert.stat.exists
+
+## might be redundant, do we need to check the status if the log file is good?
+# - name: Check on an async certificate registration
+#   async_status:
+#     jid: "{{ acme_certificate_registration.ansible_job_id }}"
+#   when: not check_acme_cert.stat.exists
+#   register: job_result
+#   until: job_result.finished
+#   retries: 20
+#   delay: 10
+
+- name: Clear the log file by moving to .old
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      [ -f {{ acme_registration_log }} ] && mv -f {{ acme_registration_log }} {{ my_acme_local_certs }}/registration.old
+  ignore_errors: true
+  when: not check_acme_cert.stat.exists
+
+- name: Check for {{ my_acme_local_certs }}/{{ my_acme_domain }}
+  stat:
+    path: "{{ my_acme_local_certs }}/{{ my_acme_domain }}"
+  register: acme_certdir_exists
+
+- name: Debug message for found directory
+  debug:
+    msg: "The directory {{ my_acme_local_certs }}/{{ my_acme_domain }} exists"
+  when: acme_certdir_exists.stat.exists and acme_certdir_exists.stat.isdir
+
+- name: Debug message for missing directory
+  debug:
+    msg: "Error: missing directory {{ my_acme_local_certs }}/{{ my_acme_domain }}"
+  when: not acme_certdir_exists.stat.exists
+
+- name: Check for {{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.cer
+  stat:
+    path: "{{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.cer"
+  register: acme_cert_exists
+  when: acme_certdir_exists.stat.exists and acme_certdir_exists.stat.isdir
+
+- name: Debug message for found certificate
+  debug:
+    msg: "The file {{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.cer exists"
+  when: acme_cert_exists.stat.exists and acme_cert_exists.stat.isreg
+
+- name: Debug message for missing certificate
+  debug:
+    msg: "Error: missing certificate {{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.cer"
+  when: not acme_cert_exists.stat.exists
+
+- name: Check for {{ my_acme_local_certs }}/{{ my_acme_domain }}/fullchain.cer
+  stat:
+    path: "{{ my_acme_local_certs }}/{{ my_acme_domain }}/fullchain.cer"
+  register: acme_fullchain_exists
+  when: acme_certdir_exists.stat.exists and acme_certdir_exists.stat.isdir
+
+- name: Debug message for found fullchain
+  debug:
+    msg: "The file {{ my_acme_local_certs }}/{{ my_acme_domain }}/fullchain.cer exists"
+  when: acme_fullchain_exists.stat.exists and acme_fullchain_exists.stat.isreg
+
+- name: Debug message for missing fullchain
+  debug:
+    msg: "Error: missing file {{ my_acme_local_certs }}/{{ my_acme_domain }}/fullchain.cer"
+  when: not acme_fullchain_exists.stat.exists
+
+- name: Check for {{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.key
+  stat:
+    path: "{{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.key"
+  register: acme_key_exists
+  when: acme_certdir_exists.stat.exists and acme_certdir_exists.stat.isdir
+
+- name: Debug message for found key
+  debug:
+    msg: "The file {{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.key exists"
+  when: acme_key_exists.stat.exists and acme_key_exists.stat.isreg
+
+- name: Debug message for missing key
+  debug:
+    msg: "Error: missing key {{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.key"
+  when: not acme_key_exists.stat.exists
+
+- name: Create {{ my_acme_domain }}.pem file
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cat {{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.key \
+       {{ my_acme_local_certs }}/{{ my_acme_domain }}/fullchain.cer \
+       > {{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.pem
+  register: acme_certificate_pemformat
+  changed_when: false
+  check_mode: no
+  when: acme_certdir_exists.stat.exists and acme_key_exists.stat.exists and acme_fullchain_exists.stat.exists
+
+- name: Check for {{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.pem
+  stat:
+    path: "{{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.pem"
+  register: acme_pem_exists
+  when: acme_key_exists.stat.exists and acme_key_exists.stat.isreg
+
+- name: Debug message for found pem
+  debug:
+    msg: "The file {{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.pem exists"
+  when: acme_pem_exists.stat.exists and acme_pem_exists.stat.isreg
+
+- name: Debug message for missing pem
+  debug:
+    msg: "Error: missing file {{ my_acme_local_certs }}/{{ my_acme_domain }}/{{ my_acme_domain }}.pem"
+  when: not acme_pem_exists.stat.exists
+
+- name: Copy certificate to /usr/local/etc/ssl
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cp -Rf {{ my_acme_local_certs }}/{{ my_acme_domain }}/ /usr/local/etc/ssl/
+  register: acme_certificate_filescopy
+  changed_when: false
+  check_mode: no
+  when: acme_certdir_exists.stat.exists and acme_key_exists.stat.exists and acme_fullchain_exists.stat.exists and acme_pem_exists.stat.exists
+
+- name: Check for /usr/local/etc/ssl/{{ my_acme_domain }}.pem
+  stat:
+    path: "/usr/local/etc/ssl//{{ my_acme_domain }}.pem"
+  register: acme_etc_ssl_pem_exists
+
+- name: Debug message for found /usr/local/etc/ssl/{{ my_acme_domain }}.pem
+  debug:
+    msg: "The file /usr/local/etc/ssl/{{ my_acme_domain }}.pem"
+  when: acme_etc_ssl_pem_exists.stat.exists and acme_etc_ssl_pem_exists.stat.isreg
+
+- name: Debug message for missing /usr/local/etc/ssl/{{ my_acme_domain }}.pem
+  debug:
+    msg: "Error: missing file /usr/local/etc/ssl/{{ my_acme_domain }}.pem"
+  when: not acme_etc_ssl_pem_exists.stat.exists
+
+- name: Set facts for certificates
+  set_fact:
+    my_default_cert: /usr/local/etc/ssl/"{{ my_acme_domain }}".cer
+    my_fullchain_cert: /usr/local/etc/ssl/fullchain.cer
+    my_private_key: /usr/local/etc/ssl/"{{ my_acme_domain }}".key
+    my_pem_cert: /usr/local/etc/ssl/"{{ my_acme_domain }}".pem
+  when: acme_etc_ssl_pem_exists.stat.exists and acme_etc_ssl_pem_exists.stat.isreg
+
+- name: Create a pem builder and reload script
+  become: yes
+  become_user: root
+  changed_when: false
+  check_mode: no
+  copy:
+    dest: "/root/bin/build-pem-reload-haproxy.sh"
+    content: |
+      #!/bin/sh
+      set -e
+      export PATH=/usr/local/bin:$PATH
+      DOMAIN="{{ my_acme_domain }}"
+      CERTSDIR="{{ my_acme_local_certs }}/$DOMAIN"
+      SERVICE=haproxy
+      if [ -f "$CERTSDIR/$DOMAIN.key" ] && [ -f "$CERTSDIR/fullchain.cer" ]; then
+          cat "$CERTSDIR/$DOMAIN.key" "$CERTSDIR/fullchain.cer" > "$CERTSDIR/$DOMAIN.pem"
+          cp -Rf "$CERTSDIR/" /usr/local/etc/ssl/
+          service "$SERVICE" restart
+      fi
+
+- name: Set executable permissions on file
+  ansible.builtin.file:
+    path: "/root/bin/build-pem-reload-haproxy.sh"
+    mode: '0755'
+    owner: root
+    group: wheel
+
+# append to /usr/local/etc/cron.d/acme.sh
+# 0 2 * * * /usr/local/sbin/acme.sh --cron --home {{ my_acme_local_certs }}  --reloadcmd /root/bin/build-pem-reload-haproxy.sh > /dev/null
+- name: Update cron job for certificate renewals
+  lineinfile:
+    dest: /usr/local/etc/cron.d/acme.sh
+    line: "0 2 * * * /usr/local/sbin/acme.sh --cron --home {{ my_acme_local_certs }} --reloadcmd /root/bin/build-pem-reload-haproxy.sh > /dev/null"
+    owner: root

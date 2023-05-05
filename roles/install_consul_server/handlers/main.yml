@@ -1,0 +1,11 @@
+---
+
+- name: Restart consul
+  ansible.builtin.service:
+    name: consul
+    state: restarted
+
+- name: Restart node_exporter
+  ansible.builtin.service:
+    name: node_exporter
+    state: restarted

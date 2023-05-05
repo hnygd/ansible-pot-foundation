@@ -1,0 +1,35 @@
+---
+
+- name: Install basic packages
+  become: yes
+  become_user: root
+  ansible.builtin.package:
+    name:
+      - bash
+      - curl
+      - dmidecode
+      - gmake
+      - go119
+      - jo
+      - jq
+      - mtr
+      - nano
+      - nmap
+      - openssl
+      - pftop
+      - python39
+      - rsync
+      - syslog-ng
+      - sudo
+      - tmux
+      - vim-tiny
+    state: present
+
+- name: Make sure root has a bin directory
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      mkdir -p /root/bin
+
+# can add some basic diagnostics scripts in /root/bin after here?

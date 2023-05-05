@@ -1,0 +1,7 @@
+---
+
+- hosts: servers
+  gather_facts: false
+  remote_user: "{{ my_default_username }}"
+  roles:
+    - raw_install_python

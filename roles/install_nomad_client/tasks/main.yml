@@ -1,0 +1,208 @@
+---
+
+- name: Install basic packages
+  become: yes
+  become_user: root
+  ansible.builtin.package:
+    name:
+      - nomad
+      - nomad-pot-driver
+    state: present
+
+- name: Make nomadjobs directory
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      mkdir -p {{ pot_nomad_jobsdirectory }}
+
+# steps to copy in sample jobs can go here
+#
+#
+
+- name: Make sure root has a bin directory
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      mkdir -p /root/bin
+
+# This approach is borrowed from a more complicated environment
+# It's troublesome to set an env of NOMAD_ADDR=http://1.2.3.4:4646
+# However we can create a shell script which sets env variables
+# and then runs nomad correctly.
+# For more complicated setups additional nomad variables can be
+# added here, for example:
+#  NOMAD_CLIENT_CERT
+#  NOMAD_CLIENT_KEY
+#  NOMAD_CACERT
+#  NOMAD_TLS_SERVER_NAME
+#
+- name: Setup nomad.sh script
+  become: yes
+  become_user: root
+  copy:
+    dest: /root/bin/nomad.sh
+    content: |
+      #!/bin/sh
+      set -e
+      export PATH=/usr/local/bin:$PATH
+      export NOMAD_ADDR="http://{{ compute_ip }}.{{ server_octet }}:4646"
+      nomad "$@"
+
+- name: Set nomad.sh executable permissions
+  ansible.builtin.file:
+    path: "/root/bin/nomad.sh"
+    mode: '0755'
+    owner: root
+    group: wheel
+
+- name: Setup nomad-status.sh script
+  become: yes
+  become_user: root
+  copy:
+    dest: /root/bin/nomad-status.sh
+    content: |
+      #!/bin/sh
+      set -e
+      SCRIPT=$(readlink -f "$0")
+      SCRIPTDIR=$(dirname "$SCRIPT")
+      "$SCRIPTDIR"/nomad.sh status
+
+- name: Set nomad-status.sh executable permissions
+  ansible.builtin.file:
+    path: "/root/bin/nomad-status.sh"
+    mode: '0755'
+    owner: root
+    group: wheel
+
+- name: Setup nomad-raft-status.sh script
+  become: yes
+  become_user: root
+  copy:
+    dest: /root/bin/nomad-raft-status.sh
+    content: |
+      #!/bin/sh
+      set -e
+      SCRIPT=$(readlink -f "$0")
+      SCRIPTDIR=$(dirname "$SCRIPT")
+      "$SCRIPTDIR"/nomad.sh operator raft list-peers
+
+- name: Set nomad-raft-status.sh executable permissions
+  ansible.builtin.file:
+    path: "/root/bin/nomad-raft-status.sh"
+    mode: '0755'
+    owner: root
+    group: wheel
+
+- name: Setup nomad-job-status.sh script
+  become: yes
+  become_user: root
+  copy:
+    dest: /root/bin/nomad-job-status.sh
+    content: |
+      #!/bin/sh
+      set -e
+      SCRIPT=$(readlink -f "$0")
+      SCRIPTDIR=$(dirname "$SCRIPT")
+      "$SCRIPTDIR"/nomad.sh job status
+
+- name: Set nomad-job-status.sh executable permissions
+  ansible.builtin.file:
+    path: "/root/bin/nomad-job-status.sh"
+    mode: '0755'
+    owner: root
+    group: wheel
+
+- name: Initialize empty list for nomad_servers_list
+  set_fact:
+    nomad_servers_list: []
+  when: "nomad_join_servers is undefined"
+
+- name: Add IP addresses of nomad servers to nomad_servers_list
+  set_fact:
+    nomad_servers_list: "{{ nomad_servers_list + [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['nomad_octet']] }}"
+  loop: "{{ groups['nomadservers'] }}"
+  when: "nomad_join_servers is undefined"
+
+- name: Print nomad_servers_list
+  debug:
+    var: nomad_servers_list
+  when: "nomad_join_servers is undefined"
+
+# when configuring nomad client via ansible we want a quoted string of items, whereas the pot image is
+# comma separated list of unquoted items
+- name: Get a quoted string version of nomad_servers_list
+  set_fact:
+    nomad_servers_list_quoted: "{{ nomad_servers_list | map('regex_replace', '^(.*)$', '\"\\1\"') | join(', ') }}"
+  run_once: true
+  when: "nomad_join_servers is undefined"
+
+- name: Print nomad_servers_list_quoted
+  debug:
+    var: nomad_servers_list_quoted
+
+- name: Set facts for nomad servers to join
+  set_fact:
+    nomad_join_servers: "{{ nomad_servers_list_quoted }}"
+  when: "nomad_join_servers is undefined"
+
+- name: Setup nomad client.hcl
+  ansible.builtin.template:
+    src: client.hcl.j2
+    dest: "/usr/local/etc/nomad/client.hcl"
+    owner: nomad
+    group: wheel
+    mode: 0644
+
+- name: Remove nomad server.hcl
+  become: yes
+  become_user: root
+  ansible.builtin.file:
+    path: /usr/local/etc/nomad/server.hcl
+    state: absent
+
+- name: Set nomad tmp permissions
+  ansible.builtin.file:
+    path: "/var/tmp/nomad"
+    state: directory
+    mode: '0700'
+    owner: root
+    group: wheel
+
+- name: setup nomad client log file
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      mkdir -p /var/log/nomad
+      touch /var/log/nomad/nomad.log
+
+- name: setup nomad client sysrc entries
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      sysrc nomad_user="root"
+      sysrc nomad_group="wheel"
+      sysrc nomad_env="PATH=/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/sbin:/bin"
+      sysrc nomad_args="-config=/usr/local/etc/nomad/client.hcl"
+      sysrc nomad_debug="YES"
+  retries: 3
+  delay: 2
+
+# mandatory pause as some hosts struggle with next step
+- name: Wait for 5 seconds before enabling nomad
+  wait_for:
+    timeout: 5
+
+- name: Enable nomad
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: nomad
+    enabled: yes
+  retries: 3
+  delay: 2
+
+# start nomad in nomad server script

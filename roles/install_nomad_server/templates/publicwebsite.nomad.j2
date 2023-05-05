@@ -1,0 +1,60 @@
+job "{{ pot_nomad_nginx_public_name }}" {
+  constraint {
+    attribute = "${attr.unique.network.ip-address}"
+    value     = "{{ hostvars[groups['frontend'][0]].ansible_host }}"
+  }
+
+  datacenters = ["{{ my_datacenter }}"]
+  type        = "service"
+
+  group "group1" {
+    count = 1
+
+    network {
+      port "http" {
+        static = {{ pot_nomad_nginx_public_access_port }}
+      }
+    }
+
+    task "{{ pot_nomad_nginx_public_name }}" {
+     driver = "pot"
+
+     service {
+        tags = ["nginx", "www"]
+        name = "{{ pot_nomad_nginx_public_name }}"
+        port = "http"
+
+        check {
+          type     = "tcp"
+          name     = "tcp"
+          interval = "60s"
+          timeout  = "30s"
+        }
+        check_restart {
+          limit = 0
+          grace = "120s"
+          ignore_warnings = false
+        }
+      }
+
+      config {
+        image = "{{ pot_nomad_nginx_url }}"
+        pot = "{{ pot_nomad_nginx_base }}"
+        tag = "{{ pot_nomad_nginx_version }}"
+        command = "/usr/local/bin/cook"
+        args = ["-s","{{ pot_nomad_nginx_public_name }}"]
+        mount = [
+          "/mnt/{{ my_data_dataset }}/jaildata/{{ pot_nomad_nginx_public_name }}/www:{{ pot_nomad_nginx_public_mount_dest }}",
+        ]
+        port_map = {
+          http = "80"
+        }
+     }
+
+      resources {
+        cpu = 200
+        memory = 64
+      }
+    }
+  }
+}

@@ -1,0 +1,67 @@
+---
+
+- name: Dummy task to trigger notify to restart syslog-ng on servers
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      service syslog-ng status
+  ignore_errors: true
+  notify:
+  - Restart syslog-ng
+
+- name: Restart syslog-ng inside consul image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot exec -p {{ pot_consul_clone_name }} service syslog-ng restart
+  ignore_errors: false
+
+- name: Restart consul inside beast image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot exec -p {{ pot_beast_clone_name }} service consul restart
+  ignore_errors: false
+  run_once: true
+  delegate_to: "{{ groups['monitoring'][0] }}"
+
+- name: Restart syslog-ng inside beast image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot exec -p {{ pot_beast_clone_name }} service syslog-ng restart
+  ignore_errors: false
+  run_once: true
+  delegate_to: "{{ groups['monitoring'][0] }}"
+
+- name: Dummy task to trigger notify to restart node_exporter on servers
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      service node_exporter status
+  ignore_errors: true
+  notify:
+  - Restart node_exporter
+
+- name: Restart node_exporter inside consul image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot exec -p {{ pot_consul_clone_name }} service node_exporter restart
+  ignore_errors: false
+
+- name: Restart node_exporter inside beast image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot exec -p {{ pot_beast_clone_name }} service node_exporter restart
+  ignore_errors: false
+  run_once: true
+  delegate_to: "{{ groups['monitoring'][0] }}"

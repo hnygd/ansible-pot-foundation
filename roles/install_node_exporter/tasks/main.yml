@@ -1,0 +1,53 @@
+---
+
+- name: Install basic packages
+  become: yes
+  become_user: root
+  ansible.builtin.package:
+    name:
+      - node_exporter
+    state: present
+
+- name: Add the nodeexport user
+  ansible.builtin.user:
+    name: nodeexport
+    comment: nodeexporter user
+    shell: /usr/bin/nologin
+
+- name: Enable node_exporter
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: node_exporter
+    enabled: yes
+  retries: 3
+  delay: 2
+
+- name: Configure node_exporter rc parameters
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      sysrc node_exporter_args="--log.level=info"
+      sysrc node_exporter_user=nodeexport
+      sysrc node_exporter_group=nodeexport
+      sysrc node_exporter_listen_address="{{ jailnet_ip }}.{{ server_octet }}:9100"
+  notify:
+  - Restart node_exporter
+
+#- name: Check if node_exporter_listen_address needs updating
+#  become: yes
+#  become_user: root
+#  shell:
+#    cmd: |
+#       sysrc -x node_exporter_listen_address
+#  ignore_errors: true
+
+#- name: Update node_exporter_listen_address in rc.conf
+#  become: yes
+#  become_user: root
+#  shell:
+#    cmd: |
+#      echo "node_exporter_listen_address=\"{{ jailnet_ip }}.{{ server_octet }}:9100\"" >> /etc/rc.conf
+#  notify:
+#  - Restart node_exporter

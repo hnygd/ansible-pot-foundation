@@ -1,0 +1,244 @@
+---
+
+- name: Install basic packages
+  become: yes
+  become_user: root
+  ansible.builtin.package:
+    name:
+      - consul
+    state: present
+
+- name: Make consul directory
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      mkdir -p /usr/local/etc/consul.d
+
+- name: Set consul.d permissions
+  ansible.builtin.file:
+    path: "/usr/local/etc/consul.d"
+    state: directory
+    mode: '0750'
+    owner: consul
+    group: wheel
+
+# Check for gossip key
+- name: Consul client check for any existing gossip.key
+  become: yes
+  become_user: root
+  shell: "ls /usr/local/etc/consul.d/gossip.key"
+  register: consul_client_filecheck_gossip_key
+  ignore_errors: true
+  changed_when: false
+  check_mode: no
+  run_once: true
+  delegate_to: "{{ groups['consulservers'][0] }}"
+
+- name: Read in gossip.key
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cat /usr/local/etc/consul.d/gossip.key
+  register: checking_existing_gossip_key
+  when: "consul_client_filecheck_gossip_key.rc == 0"
+  run_once: true
+  delegate_to: "{{ groups['consulservers'][0] }}"
+
+- name: Generate a consul gossip key
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      consul keygen > /usr/local/etc/consul.d/gossip.key
+  when: "consul_client_filecheck_gossip_key.rc == 1"
+  run_once: true
+  delegate_to: "{{ groups['consulservers'][0] }}"
+
+- name: Read in gossip.key to variable
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cat /usr/local/etc/consul.d/gossip.key
+  register: consul_generated_key
+  run_once: true
+  delegate_to: "{{ groups['consulservers'][0] }}"
+
+- name: Initialize empty list for consul_servers_list
+  set_fact:
+    consul_servers_list: []
+
+- name: Add IP addresses of consul servers to consul_servers_list
+  set_fact:
+    consul_servers_list: "{{ consul_servers_list + [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['consul_octet']] }}"
+  loop: "{{ groups['consulservers'] }}"
+
+- name: Print consul_servers_list
+  debug:
+    var: consul_servers_list
+
+# when configuring consul client via ansible we want a quoted string of items, whereas the pot image is
+# comma separated list of unquoted items
+- name: Get a quoted string version of consul_servers_list
+  set_fact:
+    consul_servers_list_quoted: "{{ consul_servers_list | map('regex_replace', '^(.*)$', '\"\\1\"') | join(', ') }}"
+  run_once: true
+
+- name: Print consul_servers_list_quoted
+  debug:
+    var: consul_servers_list_quoted
+
+- name: Set facts for gossip key and servers to join
+  set_fact:
+    consul_gossip_key: "{{ hostvars[groups['consulservers'][0]].consul_generated_key.stdout }}"
+    consul_join_servers: "{{ consul_servers_list_quoted }}"
+
+# For some reason using HCL config fails to start on FreeBSD
+# Yet works fine within jails. Can start manually but not with
+# service consul start
+#
+# Reverting to JSON setup until fixed
+# commenting out HCL setup
+#
+#- name: Setup consul client agent.hcl
+#  become: yes
+#  become_user: root
+#  copy:
+#    dest: /usr/local/etc/consul.d/agent.hcl
+#    content: |
+#      datacenter = "{{ my_datacenter }}"
+#      node_name = "{{ shortname }}"
+#      data_dir =  "/var/db/consul"
+#      bind_addr = "0.0.0.0"
+#      advertise_addr = "{{ jailnet_ip }}"."{{ server_octet }}"
+#      client_addr = "127.0.0.1 ::1"
+#      server = false
+#      dns_config = {
+#        a_record_limit = 3
+#        enable_truncate = true
+#      }
+#      ports = {
+#        http = 8500
+#        https = -1
+#      }
+#      tls {
+#        defaults {
+#          verify_incoming = false
+#          verify_outgoing = false
+#        }
+#        internal_rpc {
+#          verify_server_hostname = false
+#        }
+#      }
+#      log_file = "/var/log/consul/consul.log"
+#      log_level = "INFO"
+#      encrypt = "{{ consul_gossip_key }}"
+#      start_join = [ "{{ consul_join_servers }}" ]
+#      service = {
+#        name = "node-exporter"
+#        tags = ["_app=beast", "_service=node-exporter", "_hostname={{ shortname }}.{{ my_datacenter }}.consul"]
+#        port = 9100
+#      }
+#      telemetry = {
+#        prometheus_retention_time = "24h"
+#      }
+#
+#- name: Set agent.hcl permissions
+#  ansible.builtin.file:
+#    path: "/usr/local/etc/consul.d/agent.hcl"
+#    mode: '600'
+#    owner: consul
+#    group: wheel
+###
+
+- name: Setup consul client agent.json
+  become: yes
+  become_user: root
+  copy:
+    dest: /usr/local/etc/consul.d/agent.json
+    content: |
+      {
+        "bind_addr": "0.0.0.0",
+        "client_addr": "127.0.0.1 ::1",
+        "advertise_addr": "{{ jailnet_ip }}.{{ server_octet }}",
+        "server": false,
+        "node_name": "{{ shortname }}_consul_client",
+        "datacenter": "{{ my_datacenter }}",
+        "log_level": "INFO",
+        "data_dir": "/var/db/consul",
+        "tls": {
+          "defaults": {
+            "verify_incoming": false,
+            "verify_outgoing": false
+          },
+          "internal_rpc": {
+            "verify_incoming": false,
+            "verify_server_hostname": false
+          }
+        },
+        "encrypt": "{{ consul_gossip_key }}",
+        "enable_syslog": true,
+        "leave_on_terminate": true,
+        "start_join": [ {{ consul_join_servers }} ],
+        "service": {
+          "name": "node-exporter",
+          "tags": ["_app=host-server", "_service=node-exporter", "_hostname={{ shortname }}", "_datacenter={{ my_datacenter }}"],
+          "port": 9100
+        },
+        "telemetry": {
+          "prometheus_retention_time": "24h"
+        }
+      }
+
+- name: Set agent.json permissions
+  ansible.builtin.file:
+    path: "/usr/local/etc/consul.d/agent.json"
+    mode: '600'
+    owner: consul
+    group: wheel
+
+- name: change ownership on consul.d files
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      chown -R consul:wheel /usr/local/etc/consul.d/
+
+- name: Create consul log file
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      mkdir -p /var/log/consul
+      touch /var/log/consul/consul.log
+
+- name: Enable consul
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: consul
+    enabled: yes
+  retries: 3
+  delay: 2
+
+#- name: Set additional consul parameters (HCL)
+#  become: yes
+#  become_user: root
+#  shell:
+#    cmd: |
+#      sysrc consul_args="-config-file=/usr/local/etc/consul.d/agent.hcl"
+#      sysrc consul_syslog_output_priority="info"
+
+- name: Set additional consul parameters (JSON)
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      sysrc consul_args="-config-file=/usr/local/etc/consul.d/agent.json"
+      sysrc consul_syslog_output_priority="info"
+  retries: 3
+  delay: 2
+
+# do not start consul client yet

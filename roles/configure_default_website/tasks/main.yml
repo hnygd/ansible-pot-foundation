@@ -1,0 +1,64 @@
+---
+
+- name: Set facts for IP addresses to calculate admin page links
+  set_fact:
+    admin_pot_beast_ip: "{{ hostvars[groups['monitoring'][0]].jailnet_ip }}.{{ hostvars[groups['monitoring'][0]].beast_octet }}"
+    admin_pot_consul_ip: "{{ hostvars[groups['consulservers'][0]].jailnet_ip }}.{{ hostvars[groups['consulservers'][0]].consul_octet }}"
+    admin_pot_nomad_ip: "{{ hostvars[groups['nomadservers'][0]].jailnet_ip }}.{{ hostvars[groups['nomadservers'][0]].nomad_octet }}"
+    admin_pot_traefik_ip: "{{ hostvars[groups['traefikservers'][0]].jailnet_ip }}.{{ hostvars[groups['traefikservers'][0]].traefik_octet }}"
+
+- name: Check if zroot/{{ my_data_dataset }}/jaildata/{{ pot_nomad_nginx_name }} exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/{{ my_data_dataset }}/jaildata/{{ pot_nomad_nginx_name }}"
+  register: check_jaildata_stdwebsite_exists
+  failed_when: no
+  changed_when: "check_jaildata_stdwebsite_exists.rc != 0"
+
+- name: Create zroot/{{ my_data_dataset }}/jaildata/{{ pot_nomad_nginx_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      zfs create -o mountpoint=/mnt/{{ my_data_dataset }}/jaildata/{{ pot_nomad_nginx_name }} zroot/{{ my_data_dataset }}/jaildata/{{ pot_nomad_nginx_name }}
+  when: check_jaildata_stdwebsite_exists.rc == 1
+
+- name: Create directory /mnt/{{ my_data_dataset }}/jaildata/{{ pot_nomad_nginx_name }}/www
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      mkdir -p /mnt/{{ my_data_dataset }}/jaildata/{{ pot_nomad_nginx_name }}/www
+  when: check_jaildata_stdwebsite_exists.rc == 1
+
+- name: Set facts for persistent storage locations
+  set_fact:
+    pot_nomad_nginx_mount_src: "/mnt/{{ my_data_dataset }}/jaildata/{{ pot_nomad_nginx_name }}/www"
+
+- name: Create default index.html
+  ansible.builtin.template:
+    src: index.html.j2
+    dest: "/mnt/{{ my_data_dataset }}/jaildata/{{ pot_nomad_nginx_name }}/www/index.html"
+    owner: root
+    group: wheel
+    mode: 0644
+
+- name: Check if we have {{ pot_nomad_nginx_pot_name }} installed
+  become: yes
+  become_user: root
+  ansible.builtin.command: "/usr/local/bin/pot show -p {{ pot_nomad_nginx_pot_name }}"
+  register: pot_nomad_nginx_installed
+  failed_when: no
+  changed_when: "pot_nomad_nginx_installed.rc != 0"
+
+- name: Print out debug messages for {{ pot_nomad_nginx_pot_name }}
+  ansible.builtin.debug:
+    msg: nginx nomad base image check output is {{ pot_nomad_nginx_installed.rc }}
+
+- name: download the {{ pot_nomad_nginx_base }} pot image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot import -p "{{ pot_nomad_nginx_base }}" -t "{{ pot_nomad_nginx_version }}" -U "{{ pot_nomad_nginx_url }}"
+  when: "pot_nomad_nginx_installed.rc == 1"

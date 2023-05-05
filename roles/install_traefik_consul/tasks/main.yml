@@ -1,0 +1,173 @@
+---
+
+- name: Set pot traefik image IP address
+  set_fact:
+    pot_traefik_ip: "{{ [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['traefik_octet']] | list | join(' ') }}"
+  loop: "{{ groups['traefikservers'] }}"
+  when: "item == inventory_hostname"
+
+- name: Initialize empty list for traefik_consul_servers_list
+  set_fact:
+    traefik_consul_servers_list: []
+
+- name: Add IP addresses of consul servers to traefik_consul_servers_list
+  set_fact:
+    traefik_consul_servers_list: "{{ traefik_consul_servers_list + [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['consul_octet']] }}"
+  loop: "{{ groups['consulservers'] }}"
+
+- name: Print traefik_consul_servers_list
+  debug:
+    var: traefik_consul_servers_list
+
+- name: Get a string version of traefik_consul_servers_list
+  set_fact:
+    traefik_consul_servers_list_string: "{{ traefik_consul_servers_list | join(',') }}"
+  run_once: true
+
+- name: Print traefik_consul_servers_list_string
+  debug:
+    var: traefik_consul_servers_list_string
+
+# Check for gossip key
+- name: Checking for existing gossip.key
+  become: yes
+  become_user: root
+  shell: "ls /usr/local/etc/consul.d/gossip.key"
+  register: filecheck_gossip_key
+  ignore_errors: true
+  changed_when: false
+  check_mode: no
+  run_once: true
+  delegate_to: "{{ groups['consulservers'][0] }}"
+
+- name: Read in gossip.key
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cat /usr/local/etc/consul.d/gossip.key
+  register: checking_existing_gossip_key
+  when: "filecheck_gossip_key.rc == 0"
+  run_once: true
+  delegate_to: "{{ groups['consulservers'][0] }}"
+
+- name: Set facts for gossip.key if not defined
+  set_fact:
+    consul_gossip_key: "{{ checking_existing_gossip_key.stdout }}"
+  when: "consul_gossip_key is undefined"
+
+- name: Check if zroot/{{ my_data_dataset }}/jaildata/traefik exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/{{ my_data_dataset }}/jaildata/traefik"
+  register: check_traefikdata_exists
+  failed_when: no
+  changed_when: "check_traefikdata_exists.rc != 0"
+
+- name: Create zroot/{{ my_data_dataset }}/jaildata/traefik
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      zfs create -o mountpoint=/mnt/{{ my_data_dataset }}/jaildata/traefik zroot/{{ my_data_dataset }}/jaildata/traefik
+  when: check_traefikdata_exists.rc == 1
+
+- name: Set facts for traefik mount in
+  set_fact:
+    pot_traefik_mount_in: "/mnt/{{ my_data_dataset }}/jaildata/traefik"
+
+- name: Check if we have an installed {{ pot_traefik_pot_name }}
+  become: yes
+  become_user: root
+  ansible.builtin.command: "/usr/local/bin/pot show -p {{ pot_traefik_pot_name }}"
+  register: pot_traefik_installed
+  failed_when: no
+  changed_when: "pot_traefik_installed.rc != 0"
+
+- name: Print out debug messages for {{ pot_traefik_pot_name }}
+  ansible.builtin.debug:
+    msg: traefik base image check output is {{ pot_traefik_installed.rc }}
+
+- name: download the traefik pot image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot import -p "{{ pot_traefik_base }}" -t "{{ pot_traefik_version }}" -U "{{ pot_traefik_url }}"
+  when: "pot_traefik_installed.rc == 1"
+
+- name: Check if {{ pot_traefik_clone_name }} exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "/usr/local/bin/pot show -p {{ pot_traefik_clone_name }}"
+  register: pot_traefik_clone_installed
+  failed_when: no
+  changed_when: "pot_traefik_clone_installed.rc != 0"
+
+- name: Print out debug messages for {{ pot_traefik_clone_name }}
+  ansible.builtin.debug:
+    msg: traefik-clone check output is {{ pot_traefik_clone_installed.rc }}
+
+- name: Clone the traefik pot image to {{ pot_traefik_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot clone \
+        -P "{{ pot_traefik_pot_name }}" \
+        -p "{{ pot_traefik_clone_name }}" \
+        -N alias -i "{{ my_jail_vlan }}|{{ pot_traefik_ip }}"
+  when: pot_traefik_clone_installed.rc == 1
+
+- name: Mount in the traefik persistent storage
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot mount-in -p {{ pot_traefik_clone_name }} \
+        -d {{ pot_traefik_mount_in }} \
+        -m {{ pot_traefik_mount_dest }}
+  when: pot_traefik_clone_installed.rc == 1
+
+# need a way to get a list of consul servers pulled automatically
+- name: Set the pot parameters for {{ pot_traefik_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot set-env -p "{{ pot_traefik_clone_name }}" \
+        -E DATACENTER="{{ my_datacenter }}" \
+        -E NODENAME="{{ shortname }}_{{ pot_traefik_nodename }}_server" \
+        -E IP="{{ pot_traefik_ip }}" \
+        -E GOSSIPKEY="{{ consul_gossip_key }}" \
+        -E REMOTELOG="{{ hostvars[groups['monitoring'][0]].jailnet_ip }}.{{ hostvars[groups['monitoring'][0]].beast_octet }}" \
+        -E CONSULSERVERS='{{ traefik_consul_servers_list_string }}'
+  when: pot_traefik_clone_installed.rc == 1
+
+- name: Set the pot attributes for {{ pot_traefik_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot set-attr -p "{{ pot_traefik_clone_name }}" -A start-at-boot -V True
+  when: pot_traefik_clone_installed.rc == 1
+
+- name: Start the {{ pot_traefik_clone_name }} image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot start "{{ pot_traefik_clone_name }}"
+  when: pot_traefik_clone_installed.rc == 1
+
+- name: Wait for 10 seconds for images to start
+  wait_for:
+    timeout: 10
+  when: "pot_traefik_clone_installed.rc == 1"
+
+- name: Check if running pot is seasoned
+  stat:
+    path: /opt/pot/jails/{{ pot_traefik_clone_name }}/m/usr/local/etc/pot-is-seasoned
+  register: result
+  failed_when: result.stat.exists == false
+  changed_when: none

@@ -1,0 +1,73 @@
+ext_if="{{ my_network_interface }}"
+jail_if="{{ my_jail_vlan }}"
+compute_if="{{ my_compute_vlan }}"
+bridge_if="bridge0"
+vpn_if="wg0"
+
+set block-policy drop
+set skip on lo0
+scrub in all
+
+rdr-anchor "pot-rdr/*"
+nat-anchor "pot-rdr/*"
+
+# nat rules
+nat on $ext_if from $jail_if:network to ! $jail_if:network -> $ext_if:0
+nat on $ext_if from {{ jailnet_ip }}/24 -> $ext_if:0
+nat on $ext_if from $compute_if:network to ! $compute_if:network -> $ext_if:0
+nat on $ext_if from {{ compute_ip }}/24 -> $ext_if:0
+nat on $ext_if from 10.192/10 to !10/8 -> $ext_if:0
+nat on $ext_if from $vpn_if:network to ! $vpn_if:network -> $ext_if:0
+
+block
+antispoof for $ext_if inet
+{% if hostvars[inventory_hostname]['pf_ipv6_enable'] != 'no' %}
+antispoof for $ext_if inet6
+{% endif %}
+antispoof for $jail_if inet
+antispoof for $compute_if inet
+antispoof for $vpn_if inet
+
+pass inet proto icmp icmp-type \
+    {echorep, echoreq, unreach, squench, timex}
+{% if hostvars[inventory_hostname]['pf_ipv6_enable'] != 'no' %}
+pass on $ext_if inet6 proto icmp6 icmp6-type \
+    {unreach, toobig, neighbrsol, neighbradv, echoreq, echorep, timex}
+{% endif %}
+# ssh access
+pass in quick on $ext_if proto tcp from any to port {{ ansible_port }}
+# prevent pf start/reload from killing ansible ssh session
+pass out on $ext_if proto tcp from port {{ ansible_port }} to any flags any
+# ntp
+pass in on $ext_if inet proto udp from any to any port 123
+{% if inventory_hostname in groups['frontend'] %}
+# pass in www
+pass in quick on $ext_if proto tcp from any to port 80
+pass in quick on $ext_if proto tcp from any to port 443
+{% endif %}
+
+# wireguard vpn
+pass in quick on $ext_if proto udp from any to port {{ wg_port }}
+pass out quick on $ext_if proto udp from any to any port 51820
+pass out quick on $ext_if proto udp from any to any port 51821
+pass out quick on $ext_if proto udp from any to any port 51822
+pass out quick on $ext_if proto udp from any to any port 51823
+pass out quick on $ext_if proto udp from any to any port 51824
+
+# pass internal traffic
+pass on $jail_if
+pass from {{ jailnet_ip }}/24 to any
+pass on $compute_if
+pass from {{ compute_ip }}/24 to any
+pass on $vpn_if
+pass from {{ wireguard_ip }}/24 to any
+
+# need this to access nomad pot jobs 
+pass on $bridge_if
+pass from 10.192/10 to !10/8
+pass from 10.192/10 to {{ jailnet_ip }}/16
+pass from 10.192/10 to {{ compute_ip }}/24
+pass from {{ compute_ip }}/24 to 10.192/10
+
+# all outbound traffic on ext_if is ok
+pass out on $ext_if

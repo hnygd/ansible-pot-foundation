@@ -1,0 +1,15 @@
+---
+
+- name: Stop node_exporter
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: node_exporter
+    state: stopped
+
+- name: Disable node_exporter
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: node_exporter
+    enabled: no

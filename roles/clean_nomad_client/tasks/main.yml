@@ -1,0 +1,30 @@
+---
+
+- name: Stop nomad client
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: nomad
+    state: stopped
+
+- name: Disable nomad
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: nomad
+    enabled: no
+
+- name: Remove nomad job (default website)
+  ansible.builtin.file:
+    path: "{{ pot_nomad_jobsdirectory }}/{{ pot_nomad_job_stdwebsite }}"
+    state: absent
+
+- name: Remove nomad job (public website)
+  ansible.builtin.file:
+    path: "{{ pot_nomad_jobsdirectory }}/{{ pot_nomad_job_publicwebsite }}"
+    state: absent
+
+- name: Remove nomad config file
+  ansible.builtin.file:
+    path: "/usr/local/etc/nomad/client.hcl"
+    state: absent

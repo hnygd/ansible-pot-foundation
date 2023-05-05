@@ -1,0 +1,13 @@
+---
+
+- hosts: wgmesh
+  gather_facts: true
+  remote_user: "{{ my_default_username }}"
+  roles:
+    - install_wireguard_server
+
+- hosts: wgclients
+  gather_facts: true
+  remote_user: "{{ my_default_username }}"
+  roles:
+    - install_wireguard_roadwarrior

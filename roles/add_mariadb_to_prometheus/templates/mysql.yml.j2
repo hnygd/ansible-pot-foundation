@@ -1,0 +1,5 @@
+# mysql.yml - adjust to suit your needs using the following format
+- targets:
+  - {{ hostvars[groups['database'][0]].jailnet_ip }}.{{ hostvars[groups['database'][0]].mariadb_octet }}:9104
+  labels:
+    job: mysql

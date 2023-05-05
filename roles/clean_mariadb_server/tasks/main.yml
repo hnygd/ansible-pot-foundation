@@ -1,0 +1,46 @@
+---
+- name: Check if {{ pot_mariadb_clone_name }} exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/opt/pot/jails/{{ pot_mariadb_clone_name }}/m"
+  register: pot_mariadb_clone_installed
+  failed_when: no
+  changed_when: pot_mariadb_clone_installed.rc != 0
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+
+- name: Print out debug messages for mariadb clone
+  ansible.builtin.debug:
+    msg: mariadb-clone check output is {{ pot_mariadb_clone_installed.rc }}
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+  
+- name: Destroy {{ pot_mariadb_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot destroy -F -p "{{ pot_mariadb_clone_name }}"
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+  when: pot_mariadb_clone_installed.rc == 0
+
+- name: Check if zroot/{{ my_data_dataset }}/jaildata/mariadb exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/{{ my_data_dataset }}/jaildata/mariadb"
+  register: check_mariadb_data_exists
+  failed_when: no
+  changed_when: "check_mariadb_data_exists.rc != 0"
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+
+- name: Wipe mariadb persistant storage
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cd /mnt/{{ my_data_dataset }}/jaildata/mariadb && rm -rf *
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+  when: check_mariadb_data_exists.rc == 0

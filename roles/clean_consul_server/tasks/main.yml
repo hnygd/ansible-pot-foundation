@@ -1,0 +1,39 @@
+---
+
+- name: Check if {{ pot_consul_clone_name }} exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/opt/pot/jails/{{ pot_consul_clone_name }}/m"
+  register: pot_consul_clone_installed
+  failed_when: no
+  changed_when: pot_consul_clone_installed.rc != 0
+
+- name: Print out debug messages for consul clone
+  ansible.builtin.debug:
+    msg: consol-clone check output is {{ pot_consul_clone_installed.rc }}
+
+- name: Destroy {{ pot_consul_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot destroy -F -p "{{ pot_consul_clone_name }}"
+  when: pot_consul_clone_installed.rc == 0
+
+- name: Check if zroot/{{ my_data_dataset }}/jaildata/consul exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/{{ my_data_dataset }}/jaildata/consul"
+  register: check_consuldata_exists
+  failed_when: no
+  changed_when: "check_consuldata_exists.rc != 0"
+
+- name: Wipe consul persistant storage
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cd /mnt/{{ my_data_dataset }}/jaildata/consul && rm -rf *
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+  when: check_consuldata_exists.rc == 0

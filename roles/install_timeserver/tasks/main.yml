@@ -1,0 +1,27 @@
+---
+
+- name: Install timeserver openntpd
+  become: yes
+  become_user: root
+  ansible.builtin.package:
+    name:
+      - openntpd
+    state: present
+
+- name: Enable timeserver openntpd
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: openntpd
+    enabled: yes
+  retries: 3
+  delay: 2
+
+- name: Start timeserver openntpd
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: openntpd
+    state: started
+  retries: 3
+  delay: 2

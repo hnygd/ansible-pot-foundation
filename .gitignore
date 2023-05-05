@@ -1,0 +1,7 @@
+.DS_Store
+savedfacts/*
+id_rsa
+id_rsa.pub
+inventory.single/hosts
+inventory.three/hosts
+inventory.five/hosts

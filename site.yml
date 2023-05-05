@@ -1,0 +1,71 @@
+---
+
+- name: Ansible version check
+  any_errors_fatal: true
+  import_playbook: playbooks/ansible-version.yml
+
+- name: Raw install python
+  any_errors_fatal: false
+  import_playbook: playbooks/raw-install-python.yml
+
+- name: Prepare system
+  any_errors_fatal: true
+  import_playbook: playbooks/prepare-system.yml
+
+# comment out this item if you don't want wireguard installed
+- name: Install Wireguard basics
+  any_errors_fatal: true
+  import_playbook: playbooks/install-wireguard-basics.yml
+
+- name: Install consul client and generate gossip key and install node_exporter
+  any_errors_fatal: true
+  import_playbook: playbooks/install-consul-client.yml
+
+- name: Install consul server
+  any_errors_fatal: false
+  import_playbook: playbooks/install-consul-server.yml
+
+- name: Install syslog-ng
+  any_errors_fatal: true
+  import_playbook: playbooks/install-syslog-ng.yml
+
+- name: Install Beast-of-Argh monitoring and start logging
+  any_errors_fatal: true
+  import_playbook: playbooks/install-beast-of-argh.yml
+
+- name: Setup default website (with administration tools) dataset and files for nomad job
+  any_errors_fatal: true
+  import_playbook: playbooks/install-default-website.yml
+
+- name: Setup public website dataset and files for nomad job
+  any_errors_fatal: true
+  import_playbook: playbooks/install-public-website.yml
+
+- name: Install nomad client
+  any_errors_fatal: true
+  import_playbook: playbooks/install-nomad-client.yml
+  
+- name: Install nomad server
+  any_errors_fatal: true
+  import_playbook: playbooks/install-nomad-server.yml
+
+- name: Install traefik-consul
+  any_errors_fatal: true
+  import_playbook: playbooks/install-traefik-consul.yml
+
+# enable this when not testing
+# - name: Install acme.sh and get default certificate
+#   any_errors_fatal: true
+#   import_playbook: playbooks/install-acme-certificates.yml
+
+# - name: Install haproxy on primary server
+#   any_errors_fatal: true
+#   import_playbook: playbooks/install-haproxy.yml
+
+- name: Install openldap server
+  any_errors_fatal: true
+  import_playbook: playbooks/install-openldap-server.yml
+
+- name: Install mariadb server
+  any_errors_fatal: true
+  import_playbook: playbooks/install-mariadb.yml

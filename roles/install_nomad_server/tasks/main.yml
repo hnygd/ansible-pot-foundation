@@ -1,0 +1,317 @@
+---
+
+- name: Set pot nomad image IP address
+  set_fact:
+    pot_nomad_ip: "{{ [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['nomad_octet']] | list | join(' ') }}"
+  loop: "{{ groups['nomadservers'] }}"
+  when: "item == inventory_hostname"
+
+- name: Initialize empty list for consul_servers_list
+  set_fact:
+    nomad_consul_servers_list: []
+
+- name: Add IP addresses of consul servers to consul_servers_list
+  set_fact:
+    nomad_consul_servers_list: "{{ nomad_consul_servers_list + [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['consul_octet']] }}"
+  loop: "{{ groups['consulservers'] }}"
+
+- name: Print nomad_consul_servers_list
+  debug:
+    var: nomad_consul_servers_list
+
+- name: Get a string version of nomad_consul_servers_list
+  set_fact:
+    nomad_consul_servers_list_string: "{{ nomad_consul_servers_list | join(',') }}"
+  run_once: true
+
+- name: Print nomad_consul_servers_list_string
+  debug:
+    var: nomad_consul_servers_list_string
+
+# Check for gossip key
+- name: Checking for existing gossip.key
+  become: yes
+  become_user: root
+  shell: "ls /usr/local/etc/consul.d/gossip.key"
+  register: filecheck_gossip_key
+  ignore_errors: true
+  changed_when: false
+  check_mode: no
+  run_once: true
+  delegate_to: "{{ groups['consulservers'][0] }}"
+
+- name: Read in gossip.key
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cat /usr/local/etc/consul.d/gossip.key
+  register: checking_existing_gossip_key
+  when: "filecheck_gossip_key.rc == 0"
+  run_once: true
+  delegate_to: "{{ groups['consulservers'][0] }}"
+  
+- name: Set facts for gossip.key if not defined
+  set_fact:
+    consul_gossip_key: "{{ checking_existing_gossip_key.stdout }}"
+  when: "consul_gossip_key is undefined"
+
+## We're re-using consul gossip key for nomad gossip key
+## Check and create nomad gossip key
+# - name: Nomad client check for any existing gossip.key
+#   become: yes
+#   become_user: root
+#   ansible.builtin.command: "ls /usr/local/etc/nomad/gossip.key"
+#   register: nomad_filecheck_gossip_key
+#   ignore_errors: true
+#   changed_when: false
+#   check_mode: no
+#   run_once: true
+#   delegate_to: "{{ groups['nomadservers'][0] }}"
+
+# - name: Read in nomad gossip.key
+#   become: yes
+#   become_user: root
+#   shell:
+#     cmd: |
+#       cat /usr/local/etc/nomad/gossip.key
+#   register: checking_nomad_gossip_key
+#   when: "nomad_filecheck_gossip_key.rc == 0"
+#   run_once: true
+#   delegate_to: "{{ groups['nomadservers'][0] }}"
+
+# - name: Generate a nomad gossip key
+#   become: yes
+#   become_user: root
+#   shell:
+#     cmd: |
+#       /usr/local/bin/nomad operator gossip keyring generate > /usr/local/etc/nomad/gossip.key
+#   when: "nomad_filecheck_gossip_key.rc == 1"
+#   run_once: true
+#   delegate_to: "{{ groups['nomadservers'][0] }}"
+
+# - name: Read in nomad gossip.key to variable
+#   become: yes
+#   become_user: root
+#   shell:
+#     cmd: |
+#       cat /usr/local/etc/nomad/gossip.key
+#   register: nomad_generated_key
+#   run_once: true
+#   delegate_to: "{{ groups['nomadservers'][0] }}"
+
+# - name: Set facts for nomad gossip key
+#   set_fact:
+#     nomad_gossip_key: "{{ hostvars[groups['nomadservers'][0]].nomad_generated_key.stdout }}"
+#   when: "nomad_gossip_key is undefined"
+
+# ZFS dataset
+- name: Check if zroot/{{ my_data_dataset }}/jaildata/nomad exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/{{ my_data_dataset }}/jaildata/nomad"
+  register: check_nomaddata_exists
+  failed_when: no
+  changed_when: "check_nomaddata_exists.rc != 0"
+
+- name: Create zroot/{{ my_data_dataset }}/jaildata/nomad
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      zfs create -o mountpoint=/mnt/{{ my_data_dataset }}/jaildata/nomad zroot/{{ my_data_dataset }}/jaildata/nomad
+  when: check_nomaddata_exists.rc == 1
+
+- name: Set facts for nomad mount in
+  set_fact:
+    pot_nomad_mount_in: "/mnt/{{ my_data_dataset }}/jaildata/nomad"
+
+- name: Make nomadjobs directory
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      mkdir -p {{ pot_nomad_jobsdirectory }}
+
+- name: Setup a default website job in the nomadjobs directory for administration links
+  ansible.builtin.template:
+    src: stdwebsite.nomad.j2
+    dest: "{{ pot_nomad_jobsdirectory }}/{{ pot_nomad_job_stdwebsite }}"
+    owner: root
+    group: wheel
+    mode: 0644
+
+- name: Setup a public website job in the nomadjobs directory for administration links
+  ansible.builtin.template:
+    src: publicwebsite.nomad.j2
+    dest: "{{ pot_nomad_jobsdirectory }}/{{ pot_nomad_job_publicwebsite }}"
+    owner: root
+    group: wheel
+    mode: 0644
+
+- name: Check if we have {{ pot_nomad_pot_name }} installed
+  become: yes
+  become_user: root
+  ansible.builtin.command: "/usr/local/bin/pot show -p {{ pot_nomad_pot_name }}"
+  register: pot_nomad_server_installed
+  failed_when: no
+  changed_when: "pot_nomad_server_installed.rc != 0"
+
+- name: Print out debug messages for {{ pot_nomad_pot_name }}
+  ansible.builtin.debug:
+    msg: nomad base image check output is {{ pot_nomad_server_installed.rc }}
+
+- name: download the nomad pot image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot import -p "{{ pot_nomad_base }}" -t "{{ pot_nomad_version }}" -U "{{ pot_nomad_url }}"
+  when: "pot_nomad_server_installed.rc == 1"
+
+- name: Check if {{ pot_nomad_clone_name }} exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "/usr/local/bin/pot show -p {{ pot_nomad_clone_name }}"
+  register: pot_nomad_clone_installed
+  failed_when: no
+  changed_when: "pot_nomad_clone_installed.rc != 0"
+
+- name: Print out debug messages for {{ pot_nomad_clone_name }}
+  ansible.builtin.debug:
+    msg: nomad server clone check output is {{ pot_nomad_clone_installed.rc }}
+
+- name: Clone the nomad pot image to {{ pot_nomad_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot clone \
+        -P "{{ pot_nomad_pot_name }}" \
+        -p "{{ pot_nomad_clone_name }}" \
+        -N alias -i "{{ my_jail_vlan }}|{{ pot_nomad_ip }}"
+  when: "pot_nomad_clone_installed.rc == 1"
+
+# copy job files from /root/.nomadjobs/job.nomad to /root/nomadjobs/job.nomad in all jails
+# set importjobs=1 for only single host
+# restrict to frontend for these two jobs
+- name: Copy in nomad job file for {{ pot_nomad_job_stdwebsite }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot copy-in -p {{ pot_nomad_clone_name }} \
+        -s {{ pot_nomad_jobsdirectory }}/{{ pot_nomad_job_stdwebsite }} \
+        -d {{ pot_nomad_jobsdestination }}/{{ pot_nomad_job_stdwebsite }}
+  when: "pot_nomad_clone_installed.rc == 1"
+
+- name: Copy in nomad job file for {{ pot_nomad_job_publicwebsite }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot copy-in -p {{ pot_nomad_clone_name }} \
+        -s {{ pot_nomad_jobsdirectory }}/{{ pot_nomad_job_publicwebsite }} \
+        -d {{ pot_nomad_jobsdestination }}/{{ pot_nomad_job_publicwebsite }}
+  when: "pot_nomad_clone_installed.rc == 1" 
+
+- name: Mount in the nomad persistent storage
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot mount-in -p {{ pot_nomad_clone_name }} \
+        -d {{ pot_nomad_mount_in }} \
+        -m {{ pot_nomad_mount_dest }}
+  when: "pot_nomad_clone_installed.rc == 1"
+
+- name: Set the pot parameters for {{ pot_nomad_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot set-env -p "{{ pot_nomad_clone_name }}" \
+        -E DATACENTER="{{ my_datacenter }}" \
+        -E NODENAME="{{ shortname }}_{{ pot_nomad_nodename }}_server" \
+        -E IP="{{ pot_nomad_ip }}" \
+        -E BOOTSTRAP="{{ pot_nomad_bootstrap }}" \
+        -E GOSSIPKEY="{{ consul_gossip_key }}" \
+        -E REMOTELOG="{{ hostvars[groups['monitoring'][0]].jailnet_ip }}.{{ hostvars[groups['monitoring'][0]].beast_octet }}" \
+        -E IMPORTJOBS="{{ pot_nomad_importjobs }}" \
+        -E RAFTMULTIPLIER="{{ pot_nomad_raftmultiplier }}" \
+        -E CONSULSERVERS={{ nomad_consul_servers_list_string }}
+  when: "pot_nomad_clone_installed.rc == 1"
+
+- name: Set the pot attributes for {{ pot_nomad_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot set-attr -p "{{ pot_nomad_clone_name }}" -A start-at-boot -V True
+  when: "pot_nomad_clone_installed.rc == 1"
+
+# make this async and check the status of pot-is-seasoned for successful exit
+- name: Start the {{ pot_nomad_clone_name }} image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot start "{{ pot_nomad_clone_name }}"
+  when: "pot_nomad_clone_installed.rc == 1"
+  # async: 1
+  # poll: 0
+
+# nomad raft cluster leader elections and job loading can cause a delay in seasoned exit
+- name: Wait for 60 seconds for images to start
+  wait_for:
+    timeout: 60
+  when: "pot_nomad_clone_installed.rc == 1"
+
+# this just gives a success on cluster health and doesn't do anything specific yet
+- name: Check the cluster health
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot exec-p {{ pot_nomad_clone_name }} curl {{ pot_nomad_ip }}:4646/v1/operator/autopilot/health
+  register: nomad_health
+  failed_when: no
+  changed_when: "nomad_health.rc != 0"
+
+- name: Wait for 60 seconds more for jobs to start
+  wait_for:
+    timeout: 60
+  when: "pot_nomad_clone_installed.rc == 1"
+
+- name: Check if running pot is seasoned
+  stat:
+    path: /opt/pot/jails/{{ pot_nomad_clone_name }}/m/usr/local/etc/pot-is-seasoned
+  register: result
+  failed_when: result.stat.exists == false
+  changed_when: none
+  retries: 3
+  delay: 2
+
+- name: Restart consul client
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: consul
+    state: restarted
+  retries: 3
+  delay: 2
+
+# give a pause for consul to start and sync to network
+- name: Wait for 10 seconds for consul to settle
+  wait_for:
+    timeout: 10
+
+# start nomad client here, not in nomad client script
+- name: Start nomad client on servers
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: nomad
+    state: started
+  retries: 3
+  delay: 2

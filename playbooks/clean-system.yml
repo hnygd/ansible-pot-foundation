@@ -1,0 +1,19 @@
+---
+
+# still need to remove base pot images, and add pot de-init step
+- hosts: servers
+  gather_facts: true
+  remote_user: "{{ my_default_username }}"
+  roles:
+    - clean_beast_server
+    - clean_mariadb_server
+    - clean_openldap_server
+    - clean_traefik_server
+    - clean_nomad_server
+    - clean_nomad_client
+    - clean_node_exporter
+    - clean_consul_client
+    - clean_consul_server
+    - clean_wireguard_roadwarrior
+    - clean_wireguard_server
+

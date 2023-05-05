@@ -1,0 +1,48 @@
+---
+
+- name: Check if {{ pot_traefik_clone_name }} exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/opt/pot/jails/{{ pot_traefik_clone_name }}/m"
+  register: pot_traefik_clone_installed
+  failed_when: no
+  changed_when: pot_traefik_clone_installed.rc != 0
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+
+- name: Print out debug messages for traefik clone
+  ansible.builtin.debug:
+    msg: traefik-clone check output is {{ pot_traefik_clone_installed.rc }}
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+
+- name: Destroy {{ pot_traefik_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot destroy -F -p "{{ pot_traefik_clone_name }}"
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+  when: pot_traefik_clone_installed.rc == 0
+
+- name: Check if zroot/{{ my_data_dataset }}/jaildata/traefik exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/{{ my_data_dataset }}/jaildata/traefik"
+  register: check_traefikdata_exists
+  failed_when: no
+  changed_when: "check_traefikdata_exists.rc != 0"
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+
+- name: Wipe traefik persistant storage
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cd /mnt/{{ my_data_dataset }}/jaildata/traefik && rm -rf *
+  when: check_traefikdata_exists.rc == 0
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+

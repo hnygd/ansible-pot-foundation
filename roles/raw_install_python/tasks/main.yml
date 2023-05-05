@@ -1,0 +1,13 @@
+---
+
+- name: Update packages
+  raw: pkg update -qf
+  become: true
+  become_user: root
+  ignore_errors: false
+
+- name: Update packages
+  raw: /usr/local/bin/python3 --version || pkg install -y python3
+  become: true
+  become_user: root
+  ignore_errors: false

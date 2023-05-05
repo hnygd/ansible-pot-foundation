@@ -1,0 +1,43 @@
+---
+
+- name: Delete admin_one_private.key
+  ansible.builtin.file:
+    path: /usr/local/etc/wireguard/admin_one_private.key
+    state: absent
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+
+- name: Delete admin_one_public.key
+  ansible.builtin.file:
+    path: /usr/local/etc/wireguard/admin_one_public.key
+    state: absent
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+
+- name: Delete admin_one_preshared.key
+  ansible.builtin.file:
+    path: /usr/local/etc/wireguard/admin_one_preshared.key
+    state: absent
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+
+- name: Delete admin_two_private.key
+  ansible.builtin.file:
+    path: /usr/local/etc/wireguard/admin_two_private.key
+    state: absent
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+
+- name: Delete admin_two_public.key
+  ansible.builtin.file:
+    path: /usr/local/etc/wireguard/admin_two_public.key
+    state: absent
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+
+- name: Delete admin_two_preshared.key
+  ansible.builtin.file:
+    path: /usr/local/etc/wireguard/admin_two_preshared.key
+    state: absent
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"

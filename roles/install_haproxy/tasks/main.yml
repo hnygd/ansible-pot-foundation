@@ -1,0 +1,99 @@
+---
+
+- name: Install basic packages
+  become: yes
+  become_user: root
+  ansible.builtin.package:
+    name:
+      - haproxy
+    state: present
+
+- name: Check for /usr/local/etc/ssl/{{ my_acme_domain }}.pem
+  stat:
+    path: "/usr/local/etc/ssl/{{ my_acme_domain }}.pem"
+  register: acme_ssl_pem
+
+- name: Set facts for certificates
+  set_fact:
+    my_pem_cert: "/usr/local/etc/ssl/{{ my_acme_domain }}.pem"
+  when: acme_ssl_pem.stat.exists and acme_ssl_pem.stat.isreg
+
+# make jinja2
+- name: Setup haproxy.conf
+  become: yes
+  become_user: root
+  changed_when: false
+  check_mode: no
+  copy:
+    dest: /usr/local/etc/haproxy.conf
+    content: |
+      global
+        daemon
+        maxconn 4096
+        stats socket /tmp/haproxy.sock level admin
+        server-state-file /tmp/haproxy.serverstates
+        description HAProxy
+        ssl-default-bind-options ssl-min-ver TLSv1.2
+        ca-base /usr/local/etc/ssl/
+        crt-base /usr/local/etc/ssl/
+
+      resolvers consul
+        nameserver consul 127.0.0.1:8600
+        accepted_payload_size 8192
+        hold valid 5s
+
+      defaults
+        log global
+        mode http
+        option httplog
+        option socket-stats
+        load-server-state-from-file global
+        timeout connect 5s
+        timeout client 10s
+        timeout server 10s
+
+      frontend stats
+        bind {{ hostvars[groups['frontend'][0]].jailnet_ip }}.{{ hostvars[groups['frontend'][0]].server_octet }}:8404
+        mode http
+        option httpclose
+        stats enable
+        stats uri /
+        stats show-legends
+        stats show-desc
+        stats show-node
+        stats refresh 5s
+
+      frontend public_www
+        bind {{ haproxy_public_ip }}:80
+        bind {{ haproxy_public_ip }}:443 ssl crt {{ my_pem_cert }}
+        http-request redirect scheme https unless { ssl_fc }
+        option forwardfor
+        default_backend public_webserver
+
+      backend public_webserver
+        server {{ shortname }} {{ haproxy_default_www }}:{{ pot_nomad_nginx_public_access_port }} check maxconn 20
+
+- name: Enable haproxy
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: haproxy
+    enabled: yes
+  retries: 3
+  delay: 2
+
+- name: Specify haproxy.conf location sysrc
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      sysrc haproxy_config="/usr/local/etc/haproxy.conf"
+
+- name: Start haproxy
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: haproxy
+    state: started
+  retries: 3
+  delay: 2

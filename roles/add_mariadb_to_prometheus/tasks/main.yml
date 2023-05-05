@@ -1,0 +1,17 @@
+---
+
+- name: Update the mysql.yml file in Beast prometheus persistant storage
+  ansible.builtin.template:
+    src: mysql.yml.j2
+    dest: "/mnt/{{ my_data_dataset }}/jaildata/beast/prometheus/targets.d/mysql.yml"
+    owner: root
+    group: wheel
+    mode: 0644
+
+- name: Reload prometheus inside beast image
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot exec -p {{ pot_beast_clone_name }} service prometheus reload
+  ignore_errors: false

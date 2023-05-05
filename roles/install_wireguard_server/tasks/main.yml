@@ -1,0 +1,145 @@
+---
+
+- name: Install wireguard
+  become: yes
+  become_user: root
+  ansible.builtin.package:
+    name:
+      - wireguard
+      - wireguard-tools
+    state: present
+
+- name: Create directories if necessary
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      mkdir -p /usr/local/etc/wireguard/
+
+- name: Check for server_private.key
+  ansible.builtin.command: "ls /usr/local/etc/wireguard/server_private.key"
+  register: wg_private_key
+  #ignore_errors: true
+  #changed_when: false
+  #check_mode: no
+  failed_when: no
+  changed_when: "wg_private_key.rc != 0"
+
+- name: Generate wireguard keys
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cd /usr/local/etc/wireguard/
+      umask 077
+      wg genkey | tee /usr/local/etc/wireguard/server_private.key | wg pubkey | tee /usr/local/etc/wireguard/server_public.key
+  register: wg_serverkeys
+  #changed_when: false
+  #check_mode: no
+  when: "wg_private_key.rc == 1"
+
+- name: Check for server_public.key
+  ansible.builtin.command: "ls /usr/local/etc/wireguard/server_public.key"
+  register: wg_public_key
+  #ignore_errors: true
+  #changed_when: false
+  #check_mode: no
+  failed_when: no
+  changed_when: "wg_public_key.rc != 0"
+
+- name: Generate wireguard public key
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cd /usr/local/etc/wireguard/
+      umask 077
+      cat /usr/local/etc/wireguard/server_private.key | wg pubkey > /usr/local/etc/wireguard/server_public.key
+  register: serverkeys
+  #changed_when: false
+  #check_mode: no
+  when: "wg_public_key.rc == 1"
+
+- name: Set wireguard facts
+  set_fact:
+    wireguard_private_key: /usr/local/etc/wireguard/server_private.key
+    wireguard_public_key: /usr/local/etc/wireguard/server_public.key
+
+- name: Store wireguard private key
+  ansible.builtin.command: "cat {{ wireguard_private_key }}"
+  register: store_wg_private_key
+  no_log: true
+
+- name: Store wireguard public key
+  ansible.builtin.command: "cat {{ wireguard_public_key }}"
+  register: store_wg_public_key
+  no_log: true
+
+- name: Set more wireguard facts
+  set_fact:
+    server_wireguard_public_key: "{{ store_wg_public_key.stdout }}"
+
+# ToDo: setup preshared keys
+# challenge, need unique key for every link, and to sync this to other hosts
+# with 5 servers a different port assigned to each instance
+
+- name: Update facts for wireguard mesh usage
+  set_fact:
+    server_wireguard_private_key: "{{ store_wg_private_key.stdout }}"
+    interface_address: "{{ wireguard_ip }}.{{ wg_octet }}/24"
+
+- name: Update peer facts for wireguard mesh usage
+  set_fact:
+    peers:
+      - public_key: "{{ hostvars[inventory_hostname].server_wireguard_public_key }}"
+        allowed_ips: "{{ hostvars[inventory_hostname].wireguard_ip }}.{{ hostvars[inventory_hostname].wg_octet }}/32, {{ hostvars[inventory_hostname].jailnet_ip }}.0/24, {{ hostvars[inventory_hostname].compute_ip }}.0/24"
+        endpoint: "{{ hostvars[inventory_hostname].ansible_host }}:{{ hostvars[inventory_hostname].wg_port }}"
+        shortname: "{{ hostvars[inventory_hostname].shortname }}"
+    delegate_to: "{{ hostvars[inventory_hostname] }}"
+    loop: "{{ groups['wgmesh'] }}"
+    loop_control:
+      loop_var: "{{ hostvars[inventory_hostname] }}"
+
+- name: Set peers facts combining all servers
+  set_fact:
+    peers: "{{ groups['wgmesh'] | map('extract', hostvars) | map(attribute='peers') | list | flatten }}"
+  run_once: true
+
+- name: Print debug message with the populated values of peers
+  ansible.builtin.debug:
+    msg: "Peers: {{ peers }}"
+
+- name: Generate wg0.conf from Jinja2 template
+  ansible.builtin.template:
+    src: wg0.conf.j2
+    dest: /usr/local/etc/wireguard/wg0.conf
+    owner: root
+    group: wheel
+    mode: 0600
+
+- name: Enable wireguard
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: wireguard
+    enabled: yes
+  retries: 3
+  delay: 2
+
+- name: Set wireguard interfaces
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      sysrc wireguard_interfaces="wg0"
+  retries: 3
+  delay: 2
+
+- name: Start wireguard
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: wireguard
+    state: restarted
+  retries: 3
+  delay: 2

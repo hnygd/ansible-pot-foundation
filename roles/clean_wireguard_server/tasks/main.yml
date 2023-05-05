@@ -1,0 +1,30 @@
+---
+
+- name: Stop wireguard
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: wireguard
+    state: stopped
+
+- name: Disable wireguard
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: wireguard
+    enabled: no
+
+- name: Delete server_private.key
+  ansible.builtin.file:
+    path: /usr/local/etc/wireguard/server_private.key
+    state: absent
+
+- name: Delete server_public.key
+  ansible.builtin.file:
+    path: /usr/local/etc/wireguard/server_public.key
+    state: absent
+
+- name: Delete wg0.conf
+  ansible.builtin.file:
+    path: /usr/local/etc/wireguard/wg0.conf
+    state: absent

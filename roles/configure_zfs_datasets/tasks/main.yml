@@ -1,0 +1,71 @@
+---
+
+- name: Check if zroot/opt exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/opt"
+  register: check_opt_exists
+  failed_when: no
+  changed_when: "check_opt_exists.rc != 0"
+
+- name: Create zroot/opt
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      zfs create -o mountpoint=/opt zroot/opt
+  when: check_opt_exists.rc == 1
+
+- name: Check if zroot/opt/pot exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/opt/pot"
+  register: check_opt_pot_exists
+  failed_when: no
+  changed_when: "check_opt_pot_exists.rc != 0"
+
+- name: Create zroot/opt/pot
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      zfs create -o mountpoint=/opt/pot zroot/opt/pot
+  when: check_opt_pot_exists.rc == 1
+
+- name: Check if zroot/{{ my_data_dataset }} exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/{{ my_data_dataset }}"
+  register: check_mydata_exists
+  failed_when: no
+  changed_when: "check_mydata_exists.rc != 0"
+
+- name: Create zroot/{{ my_data_dataset }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      zfs create -o mountpoint=/mnt/{{ my_data_dataset }} zroot/{{ my_data_dataset }}
+  when: check_mydata_exists.rc == 1
+
+- name: Check if zroot/{{ my_data_dataset }}/jaildata exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/{{ my_data_dataset }}/jaildata"
+  register: check_jaildata_exists
+  failed_when: no
+  changed_when: "check_jaildata_exists.rc != 0"
+
+- name: Create zroot/{{ my_data_dataset }}/jaildata
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      zfs create -o mountpoint=/mnt/{{ my_data_dataset }}/jaildata zroot/{{ my_data_dataset }}/jaildata
+  when: check_jaildata_exists.rc == 1
+
+- name: Set facts for persistent storage locations
+  set_fact:
+    pot_zfs_dataset: zroot/opt/pot
+    pot_dataset: /opt/pot
+    pot_jaildata: /mnt/data/jaildata

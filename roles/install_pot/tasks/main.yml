@@ -1,0 +1,55 @@
+---
+
+- name: Enable clearing of /tmp on reboot
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      sysrc clear_tmp_enable="YES"
+
+- name: Enable kernel accounting in loader.conf
+  ansible.builtin.lineinfile:
+    path: /boot/loader.conf
+    line: kern.racct.enable=1
+    create: yes
+
+- name: Install pot and potnet
+  become: yes
+  become_user: root
+  ansible.builtin.package:
+    name:
+      - pot
+      - potnet
+    state: present
+
+- name: Setup pot.conf
+  become: yes
+  become_user: root
+  copy:
+    dest: /usr/local/etc/pot/pot.conf
+    content: |
+      POT_ZFS_ROOT="{{ pot_zfs_dataset }}"
+      POT_FS_ROOT="{{ pot_dataset }}"
+      POT_CACHE=/var/cache/pot
+      POT_TMP=/tmp
+      POT_NETWORK=10.192.0.0/10
+      POT_NETMASK=255.192.0.0
+      POT_GATEWAY=10.192.0.1
+      #POT_EXTIF="{{ my_network_interface }}"
+      POT_EXTIF="{{ my_jail_vlan }}"
+
+- name: Initiate pot
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot init -v
+
+- name: Enable pot
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: pot
+    enabled: yes
+  retries: 3
+  delay: 2

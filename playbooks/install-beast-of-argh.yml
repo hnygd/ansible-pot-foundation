@@ -1,0 +1,13 @@
+---
+
+- hosts: monitoring
+  gather_facts: true
+  remote_user: "{{ my_default_username }}"
+  roles:
+    - install_beast_of_argh
+
+- hosts: servers
+  gather_facts: true
+  remote_user: "{{ my_default_username }}"
+  roles:
+    - restart_monitoring_services

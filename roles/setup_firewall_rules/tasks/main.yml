@@ -1,0 +1,49 @@
+---
+
+- name: Install pftop
+  become: yes
+  become_user: root
+  ansible.builtin.package:
+    name:
+      - pftop
+    state: present
+
+- name: Create pf.conf Jinja2 template
+  ansible.builtin.template:
+    src: pf.conf.j2
+    dest: /etc/pf.conf
+    owner: root
+    group: wheel
+    mode: 0644
+
+- name: Enable pf firewall
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: pf
+    enabled: yes
+  retries: 3
+  delay: 2
+
+- name: Enable pflog service
+  become: yes
+  become_user: root
+  ansible.builtin.service:
+    name: pflog
+    enabled: yes
+  retries: 3
+  delay: 2
+
+- name: Restart pf firewall
+  become: yes
+  become_user: root
+  shell: service pf restart
+  async: 1
+  poll: 0
+
+- name: Wait for connection after pf restart
+  wait_for_connection:
+    connect_timeout: 60
+    sleep: 5
+    delay: 5
+    timeout: 300

@@ -1,0 +1,11 @@
+---
+
+- name: Restart syslog-ng
+  ansible.builtin.service:
+    name: syslog-ng
+    state: restarted
+
+- name: Restart node_exporter
+  ansible.builtin.service:
+    name: node_exporter
+    state: restarted

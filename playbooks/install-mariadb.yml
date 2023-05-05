@@ -1,0 +1,13 @@
+---
+
+- hosts: database
+  gather_facts: true
+  remote_user: "{{ my_default_username }}"
+  roles:
+    - install_mariadb_server
+
+- hosts: monitoring
+  gather_facts: true
+  remote_user: "{{ my_default_username }}"
+  roles:
+    - add_mariadb_to_prometheus

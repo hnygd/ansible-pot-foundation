@@ -1,0 +1,13 @@
+---
+
+# setup firewall AFTER installing pot
+- hosts: servers
+  gather_facts: true
+  remote_user: "{{ my_default_username }}"
+  roles:
+    - configure_network_interfaces
+    - install_basic_packages
+    - configure_zfs_datasets
+    - install_timeserver
+    - install_pot
+    - setup_firewall_rules

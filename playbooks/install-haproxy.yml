@@ -1,0 +1,7 @@
+---
+
+- hosts: frontend
+  gather_facts: true
+  remote_user: "{{ my_default_username }}"
+  roles:
+    - install_haproxy

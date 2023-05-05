@@ -1,0 +1,47 @@
+---
+
+- name: Check if {{ pot_ldap_clone_name }} exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/opt/pot/jails/{{ pot_ldap_clone_name }}/m"
+  register: pot_ldap_clone_installed
+  failed_when: no
+  changed_when: pot_ldap_clone_installed.rc != 0
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+
+- name: Print out debug messages for openldap clone
+  ansible.builtin.debug:
+    msg: openldap-clone check output is {{ pot_ldap_clone_installed.rc }}
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+
+- name: Destroy {{ pot_ldap_clone_name }}
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      pot destroy -F -p "{{ pot_ldap_clone_name }}"
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+  when: pot_ldap_clone_installed.rc == 0
+
+- name: Check if zroot/{{ my_data_dataset }}/jaildata/openldap exists
+  become: yes
+  become_user: root
+  ansible.builtin.command: "zfs list -t filesystem zroot/{{ my_data_dataset }}/jaildata/openldap"
+  register: check_ldapdata_exists
+  failed_when: no
+  changed_when: "check_ldapdata_exists.rc != 0"
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+
+- name: Wipe openldap persistant storage
+  become: yes
+  become_user: root
+  shell:
+    cmd: |
+      cd /mnt/{{ my_data_dataset }}/jaildata/openldap && rm -rf *
+  run_once: true
+  delegate_to: "{{ groups['servers'][0] }}"
+  when: check_ldapdata_exists.rc == 0

@@ -1,0 +1,16 @@
+[Interface]
+PrivateKey = {{ server_wireguard_private_key }}
+Address = {{ interface_address }}
+ListenPort = {{ wg_port }}
+DNS = {{ external_dns_server }}
+
+{% for peer in peers %}
+{% if peer.shortname != hostvars[inventory_hostname]['shortname'] %}
+[Peer]
+PublicKey = {{ peer.public_key }}
+AllowedIPs = {{ peer.allowed_ips }}
+Endpoint = {{ peer.endpoint }}
+PersistentKeepalive = {{ wireguard_keepalive }}
+
+{% endif %}
+{% endfor %}

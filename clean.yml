@@ -1,0 +1,5 @@
+---
+
+- name: Clean system
+  any_errors_fatal: false
+  import_playbook: playbooks/clean-system.yml
