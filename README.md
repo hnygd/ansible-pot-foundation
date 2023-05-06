@@ -12,7 +12,7 @@ This is a platform to build on. It doesn't do very much by itself. You need to a
 
 ### Package sources
 
-You must have decided on the `quarterly` or `latest` package stream beforehand. This script proceed to install from the already configured stream. 
+You must have decided on the `quarterly` or `latest` package stream beforehand. This script will install from the already configured stream. 
 
 ### Default network interface must be labelled untrusted
 
@@ -49,24 +49,26 @@ vi hosts
 
 ### Configure variables in hosts
 
-Replace the following values in your inventory `hosts` file with correct data:
+Replace the following values in your inventory `hosts` file with your data:
 
-* REPLACE-WITH-USERNAME (username for your server)
-* REPLACE-WITH-IP-HOSTNAME (IP or hostname of your server)
-* REPLACE-WITH-EMAIL-ADDRESS (your email address)
-* REPLACE-WITH-DOMAIN-NAME (your domain name)
-* REPLACE-FRONTEND-IP (the IP address of your frontend host)
-* REPLACE-GRAFANA-USER (username for grafana, e.g. admin)
-* REPLACE-GRAFANA-PASSWORD (password for grafana user)
-* REPLACE-WITH-LDAP-PASSWORD (ldap master password)
-* REPLACE-DEFAULT-LDAP-USER (default openldap user)
+```
+* REPLACE-WITH-USERNAME              (username for your server)
+* REPLACE-WITH-IP-HOSTNAME           (IP or hostname of your server)
+* REPLACE-WITH-EMAIL-ADDRESS         (your email address)
+* REPLACE-WITH-DOMAIN-NAME           (your domain name)
+* REPLACE-FRONTEND-IP                (the IP address of your frontend host)
+* REPLACE-GRAFANA-USER               (username for grafana, e.g. admin)
+* REPLACE-GRAFANA-PASSWORD           (password for grafana user)
+* REPLACE-WITH-LDAP-PASSWORD         (ldap master password)
+* REPLACE-DEFAULT-LDAP-USER          (default openldap user)
 * REPLACE-DEFAULT-LDAP-USER-PASSWORD (openldap user password)
-* REPLACE-WITH-MYSQL-ROOT-PASSWORD (mariadb root password)
-* REPLACE-WITH-PROM-SCRAPE-PASSWORD (password for prometheus stat scraping)
+* REPLACE-WITH-MYSQL-ROOT-PASSWORD   (mariadb root password)
+* REPLACE-WITH-PROM-SCRAPE-PASSWORD  (password for prometheus stat scraping)
+```
 
 ### Run script
 
-You can install a full system by running:
+Install a full system by running:
 
 ```
 ansible-playbook -i inventory.five/hosts site.yml
