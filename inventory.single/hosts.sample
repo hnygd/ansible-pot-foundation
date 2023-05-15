@@ -148,10 +148,10 @@ server1
 server1 beast_octet=100
 
 [consulservers]
-server1 consul_octet=10
+server1 consul_octet=10 consul_scrape_port=8500
 
 [nomadservers]
-server1 nomad_octet=11 pot_nomad_importjobs=1
+server1 nomad_octet=11 pot_nomad_importjobs=1 nomad_scrape_port=4646
 
 [traefikservers]
 server1 traefik_octet=12 traefik_scrape_port=8082

@@ -156,18 +156,18 @@ server1
 server1 beast_octet=100
 
 [consulservers]
-server1 consul_octet=10
-server2 consul_octet=10
-server3 consul_octet=10
-server4 consul_octet=10
-server5 consul_octet=10
+server1 consul_octet=10 consul_scrape_port=8500
+server2 consul_octet=10 consul_scrape_port=8500
+server3 consul_octet=10 consul_scrape_port=8500
+server4 consul_octet=10 consul_scrape_port=8500
+server5 consul_octet=10 consul_scrape_port=8500
 
 [nomadservers]
-server1 nomad_octet=11 pot_nomad_importjobs=1
-server2 nomad_octet=11 pot_nomad_importjobs=0
-server3 nomad_octet=11 pot_nomad_importjobs=0
-server4 nomad_octet=11 pot_nomad_importjobs=0
-server5 nomad_octet=11 pot_nomad_importjobs=0
+server1 nomad_octet=11 pot_nomad_importjobs=1 nomad_scrape_port=4646
+server2 nomad_octet=11 pot_nomad_importjobs=0 nomad_scrape_port=4646
+server3 nomad_octet=11 pot_nomad_importjobs=0 nomad_scrape_port=4646
+server4 nomad_octet=11 pot_nomad_importjobs=0 nomad_scrape_port=4646
+server5 nomad_octet=11 pot_nomad_importjobs=0 nomad_scrape_port=4646
 
 [traefikservers]
 server1 traefik_octet=12 traefik_scrape_port=8082

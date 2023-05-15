@@ -41,10 +41,37 @@
     var: beast_consul_join_servers
 
 # scrape consul
-# we already have a list we use for consul join, re-use that to scrape
+- name: Initialize empty list for beast_scrape_consul_servers_list
+  set_fact:
+    beast_scrape_consul_servers_list: []
+  when: "my_consul_scrape_list is undefined"
+
+- name: Add IP addresses and port of consul servers to beast_scrape_consul_servers_list
+  set_fact:
+    beast_scrape_consul_servers_list: "{{ beast_scrape_consul_servers_list + [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['consul_octet'] ~ ':' ~ hostvars[item]['consul_scrape_port']] }}"
+  loop: "{{ groups['consulservers'] }}"
+  when: "my_consul_scrape_list is undefined"
+
+- name: Print beast_scrape_consul_servers_list
+  debug:
+    var: beast_scrape_consul_servers_list
+  when: "my_consul_scrape_list is undefined"
+
+- name: Get a string version of beast_scrape_consul_servers_list
+  set_fact:
+    beast_scrape_consul_servers_list_string: "{{ beast_scrape_consul_servers_list | join(',') }}"
+  run_once: true
+  when: "my_consul_scrape_list is undefined"
+
+- name: Print beast_scrape_consul_servers_list_string
+  debug:
+    var: beast_scrape_consul_servers_list_string
+  when: "my_consul_scrape_list is undefined"
+
 - name: Set fact for consul scrape list
   set_fact:
-    my_consul_scrape_list: "{{ beast_consul_join_servers }}"
+    my_consul_scrape_list: "{{ beast_scrape_consul_servers_list_string }}"
+  when: "my_consul_scrape_list is undefined"
 
 # scrape nomad
 - name: Initialize empty list for nomad_servers_list
@@ -54,7 +81,7 @@
 
 - name: Add IP addresses of nomad servers to nomad_servers_list
   set_fact:
-    nomad_servers_list: "{{ nomad_servers_list + [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['nomad_octet']] }}"
+    nomad_servers_list: "{{ nomad_servers_list + [hostvars[item]['jailnet_ip'] ~ '.' ~ hostvars[item]['nomad_octet'] ~ ':' ~ hostvars[item]['nomad_scrape_port']] }}"
   loop: "{{ groups['nomadservers'] }}"
   when: "my_nomad_scrape_list is undefined"
 
